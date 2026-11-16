@@ -135,6 +135,9 @@ function range() {
 function baseOptions(extra = {}) {
   return {
     responsive: true, maintainAspectRatio: false, animation: false,
+    // Sobremuestreo: con zoom del navegador ≠ 100 % la densidad es fraccionaria (p. ej. 0,9) y el
+    // texto del canvas se ve borroso. Dibujar al menos a 2× lo deja nítido con cualquier zoom.
+    devicePixelRatio: chartPixelRatio(),
     interaction: { mode: "index", intersect: false },
     plugins: {
       legend: { position: "top", align: "start", labels: { color: css("--text-secondary"), boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 3 } },
@@ -564,10 +567,16 @@ function renderIngest(panel) {
 // Redibuja las gráficas cuando cambia la densidad de píxeles (zoom del navegador, mover la
 // ventana a otro monitor). Si el contenedor no cambia de tamaño, Chart.js no se entera y el
 // canvas queda escalado y borroso.
+const chartPixelRatio = () => Math.max(2, Math.ceil(window.devicePixelRatio || 1));
+
 function watchPixelRatio() {
   const query = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
   query.addEventListener("change", () => {
-    Object.values(state.charts).forEach((chart) => chart?.resize());
+    Object.values(state.charts).forEach((chart) => {
+      if (!chart) return;
+      chart.options.devicePixelRatio = chartPixelRatio();
+      chart.resize();
+    });
     watchPixelRatio();
   }, { once: true });
 }

@@ -135,6 +135,7 @@ class Handler(BaseHTTPRequestHandler):
         )
         # Obligatorio con HTTP/1.1 keep-alive: sin él, el navegador espera más bytes indefinidamente.
         self.send_header("content-length", str(len(payload)))
+        self.send_header("cache-control", "no-cache")  # tras un cambio, el navegador revalida
         self.end_headers()
         self.wfile.write(payload)
 
