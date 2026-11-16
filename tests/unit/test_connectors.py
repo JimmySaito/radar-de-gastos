@@ -310,3 +310,47 @@ def test_openai_errors_explain_the_cause(status: int, body: dict[str, Any], expe
     )
     with pytest.raises(httpx.HTTPStatusError, match=expected):
         list(OpenAIUsageConnector(httpx.Client(base_url=base)).fetch("acme", WINDOW))
+
+
+def test_record_builder_skips_rows_that_round_to_zero_and_negative_credits() -> None:
+    """Regresión: OpenAI devuelve líneas de costo de 1e-7 USD que se redondean a 0."""
+    from usage_hub.connectors._util import RecordBuilder
+
+    builder = RecordBuilder("acme", Provider.OPENAI)
+    day = date(2026, 11, 2)
+    builder.add(day, "gpt, cache writes - 12hr", "project:p", cost=Decimal("0.0000001"))
+    builder.add(day, "credito", "project:p", cost=Decimal("-5"))
+    builder.add(day, "gpt, input", "project:p", cost=Decimal("0.5"))
+    records = list(builder.build())
+    assert [(r.service, r.cost) for r in records] == [("gpt, input", Decimal("0.500000"))]
+
+
+@respx.mock
+def test_openai_sync_survives_tiny_cost_lines() -> None:
+    base = "https://api.openai.test/v1"
+    respx.get(f"{base}/organization/usage/completions").mock(
+        return_value=httpx.Response(200, json={"data": [], "has_more": False})
+    )
+    respx.get(f"{base}/organization/costs").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "start_time": 1793491200,
+                        "results": [
+                            {
+                                "amount": {"value": 0.00000004},
+                                "line_item": "x, cache writes - 12hr",
+                                "project_id": "p",
+                            },
+                            {"amount": {"value": 1.25}, "line_item": "x, input", "project_id": "p"},
+                        ],
+                    }
+                ],
+                "has_more": False,
+            },
+        )
+    )
+    records = list(OpenAIUsageConnector(httpx.Client(base_url=base)).fetch("acme", WINDOW))
+    assert [r.cost for r in records] == [Decimal("1.250000")]

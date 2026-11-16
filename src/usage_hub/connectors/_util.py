@@ -9,6 +9,8 @@ from decimal import Decimal
 
 from usage_hub.domain.models import Provider, UsageRecord
 
+COST_QUANTUM = Decimal("0.000001")
+
 
 def to_date(value: object) -> date:
     """Acepta datetime, date, ISO-8601 (con 'Z') o epoch en segundos."""
@@ -78,8 +80,12 @@ class RecordBuilder:
         for (day, service, principal), acc in sorted(self._rows.items()):
             if not keep(day):
                 continue
+            # Se redondea ANTES de decidir: una línea de costo de fracciones de centavo (p. ej.
+            # OpenAI "cache writes - 12hr") queda en 0 y no debe producir un registro inválido.
+            # Los ajustes negativos (créditos) quedan fuera del modelo canónico (ver deuda técnica).
+            cost = max(acc.cost.quantize(COST_QUANTUM), Decimal(0))
             if not any(
-                (acc.input_tokens, acc.output_tokens, acc.cached_tokens, acc.requests, acc.cost)
+                (acc.input_tokens, acc.output_tokens, acc.cached_tokens, acc.requests, cost)
             ):
                 continue
             yield UsageRecord(
@@ -92,6 +98,6 @@ class RecordBuilder:
                 output_tokens=acc.output_tokens,
                 cached_tokens=acc.cached_tokens,
                 requests=acc.requests,
-                cost=acc.cost.quantize(Decimal("0.000001")),
+                cost=cost,
                 currency=self._currency,
             )
