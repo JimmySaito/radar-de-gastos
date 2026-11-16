@@ -1,0 +1,109 @@
+# ---------------------------------------------------------------- API HTTP
+resource "aws_apigatewayv2_api" "http" {
+  name          = "${local.name}-api"
+  protocol_type = "HTTP"
+
+  # "*" es seguro aquí: la API se autentica con bearer token (no cookies), y fijar
+  # el dominio de CloudFront crearía un ciclo de dependencias (CSP ↔ CORS).
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET", "POST", "PUT", "OPTIONS"]
+    allow_headers = ["authorization", "content-type"]
+    max_age       = 600
+  }
+}
+
+resource "aws_apigatewayv2_authorizer" "jwt" {
+  api_id           = aws_apigatewayv2_api.http.id
+  name             = "cognito"
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+
+  jwt_configuration {
+    issuer   = "https://cognito-idp.${data.aws_region.current.name}.amazonaws.com/${aws_cognito_user_pool.main.id}"
+    audience = [aws_cognito_user_pool_client.spa.id, aws_cognito_user_pool_client.ingest.id]
+  }
+}
+
+resource "aws_apigatewayv2_integration" "api" {
+  api_id                 = aws_apigatewayv2_api.http.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = module.api_fn.invoke_arn
+  payload_format_version = "2.0"
+  timeout_milliseconds   = 10000
+}
+
+locals {
+  protected_routes = [
+    "GET /v1/summary",
+    "GET /v1/timeseries",
+    "POST /v1/usage/records",
+    "GET /v1/mappings",
+    "PUT /v1/mappings",
+    "GET /v1/connectors",
+    "PUT /v1/connectors",
+    "GET /v1/budgets",
+    "PUT /v1/budgets",
+  ]
+}
+
+resource "aws_apigatewayv2_route" "protected" {
+  for_each           = toset(local.protected_routes)
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.api.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.jwt.id
+}
+
+resource "aws_apigatewayv2_route" "health" {
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "GET /v1/health"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
+resource "aws_cloudwatch_log_group" "api_access" {
+  name              = "/aws/apigateway/${local.name}"
+  retention_in_days = 30
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.http.id
+  name        = "$default"
+  auto_deploy = true
+
+  default_route_settings {
+    throttling_rate_limit  = var.api_throttle_rate
+    throttling_burst_limit = var.api_throttle_burst
+    detailed_metrics_enabled = true
+  }
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_access.arn
+    format = jsonencode({
+      requestId      = "$context.requestId"
+      ip             = "$context.identity.sourceIp"
+      routeKey       = "$context.routeKey"
+      status         = "$context.status"
+      latency        = "$context.responseLatency"
+      integrationErr = "$context.integrationErrorMessage"
+      sub            = "$context.authorizer.claims.sub"
+    })
+  }
+}
+
+resource "aws_lambda_permission" "apigw" {
+  statement_id  = "AllowApiGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = module.api_fn.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "scheduler" {
+  for_each      = { scheduler = module.scheduler_fn.function_name, budget = module.budget_fn.function_name }
+  statement_id  = "AllowEventBridgeScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = each.value
+  principal     = "scheduler.amazonaws.com"
+}

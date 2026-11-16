@@ -1,0 +1,38 @@
+{
+  "run_id": "54c14fea",
+  "scenario": "load",
+  "mode": "mixed",
+  "target_rps": 60.0,
+  "duration_s": 37.1,
+  "requests": 1049,
+  "achieved_rps": 28.2,
+  "records_per_s": 287.4,
+  "duplicates_sent": 75,
+  "client_dropped": 751,
+  "status": {
+    "read:200": 528,
+    "ingest:202": 502,
+    "read:599": 19
+  },
+  "error_rate": 0.01811,
+  "consistency": {
+    "expected_cost": "266870.15",
+    "observed_cost": "266870.15",
+    "converged": true,
+    "convergence_s": 0.0
+  },
+  "ingest_latency_ms": {
+    "p50": 593.4,
+    "p95": 2297.1,
+    "p99": 3151.7,
+    "max": 4559.5,
+    "mean": 771.1
+  },
+  "read_latency_ms": {
+    "p50": 1073.4,
+    "p95": 2796.1,
+    "p99": 6382.6,
+    "max": 7782.6,
+    "mean": 1170.0
+  }
+}

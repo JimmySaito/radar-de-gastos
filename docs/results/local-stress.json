@@ -1,0 +1,38 @@
+{
+  "run_id": "fcda2faf",
+  "scenario": "stress",
+  "mode": "mixed",
+  "target_rps": 60.0,
+  "duration_s": 34.0,
+  "requests": 964,
+  "achieved_rps": 28.4,
+  "records_per_s": 322.8,
+  "duplicates_sent": 78,
+  "client_dropped": 926,
+  "status": {
+    "read:200": 427,
+    "ingest:202": 517,
+    "read:599": 20
+  },
+  "error_rate": 0.02075,
+  "consistency": {
+    "expected_cost": "274696.88",
+    "observed_cost": "274696.88",
+    "converged": true,
+    "convergence_s": 0.0
+  },
+  "ingest_latency_ms": {
+    "p50": 354.5,
+    "p95": 1875.4,
+    "p99": 2490.3,
+    "max": 4903.2,
+    "mean": 597.5
+  },
+  "read_latency_ms": {
+    "p50": 606.0,
+    "p95": 3033.7,
+    "p99": 5534.6,
+    "max": 9120.1,
+    "mean": 871.2
+  }
+}

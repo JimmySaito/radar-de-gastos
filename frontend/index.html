@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UsageHub</title>
+  <meta name="description" content="Dashboard centralizado de consumo de IA y nube por proveedor, equipo y persona.">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="app.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>UsageHub</span>
+      <span class="tenant" id="tenant"></span>
+    </div>
+    <div class="filters" role="group" aria-label="Rango de fechas">
+      <button type="button" data-days="7">7 días</button>
+      <button type="button" data-days="30" aria-pressed="true">30 días</button>
+      <button type="button" data-days="90">90 días</button>
+      <select id="groupBy" aria-label="Agrupar serie por">
+        <option value="provider">Por proveedor</option>
+        <option value="team">Por equipo</option>
+      </select>
+      <button type="button" id="logout" hidden>Salir</button>
+    </div>
+  </header>
+
+  <main>
+    <p class="banner" id="banner" hidden></p>
+
+    <section class="kpis" aria-label="Indicadores">
+      <article class="kpi"><h2>Costo total</h2><p class="value" id="kpiCost">–</p><p class="sub" id="kpiRange"></p></article>
+      <article class="kpi"><h2>Tokens</h2><p class="value" id="kpiTokens">–</p><p class="sub" id="kpiTokensSub"></p></article>
+      <article class="kpi"><h2>Solicitudes</h2><p class="value" id="kpiRequests">–</p><p class="sub">llamadas a modelos/API</p></article>
+      <article class="kpi"><h2>Equipo con más gasto</h2><p class="value" id="kpiTeam">–</p><p class="sub" id="kpiTeamSub"></p></article>
+    </section>
+
+    <section class="card wide">
+      <div class="card-head">
+        <h2 id="seriesTitle">Costo diario por proveedor (USD)</h2>
+        <button type="button" class="link" data-table-for="series">Ver tabla</button>
+      </div>
+      <div class="chart-box tall"><canvas id="seriesChart" role="img" aria-label="Costo diario apilado"></canvas></div>
+      <div class="table-view" id="series-table" hidden></div>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <div class="card-head"><h2>Proveedores</h2></div>
+        <table class="data" id="providersTable"><thead><tr><th>Proveedor</th><th class="num">Costo</th><th class="num">Tokens</th><th class="num">%</th></tr></thead><tbody></tbody></table>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Presupuestos del mes</h2></div>
+        <table class="data" id="budgetsTable"><thead><tr><th>Equipo</th><th class="num">Gastado</th><th class="num">Límite</th><th>Estado</th></tr></thead><tbody></tbody></table>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Personas con más consumo</h2></div>
+        <div class="chart-box"><canvas id="membersChart" role="img" aria-label="Personas con más consumo"></canvas></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Modelos y servicios</h2></div>
+        <div class="chart-box"><canvas id="servicesChart" role="img" aria-label="Modelos y servicios con más costo"></canvas></div>
+      </section>
+    </div>
+  </main>
+  <footer>Datos de proveedores con 4–24 h de retraso. Los montos se muestran antes de créditos e impuestos.</footer>
+</body>
+</html>

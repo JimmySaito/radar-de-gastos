@@ -1,0 +1,38 @@
+{
+  "run_id": "94238ab4",
+  "scenario": "spike",
+  "mode": "mixed",
+  "target_rps": 60.0,
+  "duration_s": 30.1,
+  "requests": 688,
+  "achieved_rps": 22.9,
+  "records_per_s": 235.2,
+  "duplicates_sent": 60,
+  "client_dropped": 320,
+  "status": {
+    "ingest:202": 343,
+    "read:200": 328,
+    "read:599": 17
+  },
+  "error_rate": 0.02471,
+  "consistency": {
+    "expected_cost": "177450.48",
+    "observed_cost": "177450.48",
+    "converged": true,
+    "convergence_s": 0.0
+  },
+  "ingest_latency_ms": {
+    "p50": 245.8,
+    "p95": 1165.2,
+    "p99": 1456.2,
+    "max": 1943.9,
+    "mean": 341.7
+  },
+  "read_latency_ms": {
+    "p50": 326.1,
+    "p95": 1645.3,
+    "p99": 5371.3,
+    "max": 6834.4,
+    "mean": 575.6
+  }
+}

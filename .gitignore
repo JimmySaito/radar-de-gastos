@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+reports/
+htmlcov/
+.hypothesis/
+
+# Build
+build/
+dist/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+terraform.tfvars
+backend.tf
+.terraform.lock.hcl.bak
+crash.log
+
+# Entorno
+.env
+.env.*
+*.pem
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,76 @@
+variable "name" {
+  description = "Nombre de la función (también prefijo del rol y del log group)."
+  type        = string
+}
+
+variable "description" {
+  type    = string
+  default = ""
+}
+
+variable "handler" {
+  description = "Ruta del handler, p. ej. usage_hub.handlers.api.handler"
+  type        = string
+}
+
+variable "package_path" {
+  description = "Zip con el código de la aplicación (generado por make build)."
+  type        = string
+}
+
+variable "layers" {
+  type    = list(string)
+  default = []
+}
+
+variable "memory_mb" {
+  type    = number
+  default = 512
+}
+
+variable "timeout_seconds" {
+  type    = number
+  default = 30
+}
+
+variable "reserved_concurrency" {
+  description = "Concurrencia reservada (-1 = sin reserva). Protege la base de datos y a los proveedores de picos."
+  type        = number
+  default     = -1
+}
+
+variable "environment" {
+  type    = map(string)
+  default = {}
+}
+
+variable "policy_json" {
+  description = "Política IAM inline de mínimo privilegio."
+  type        = string
+  default     = null
+}
+
+variable "log_retention_days" {
+  type    = number
+  default = 30
+}
+
+variable "log_level" {
+  type    = string
+  default = "INFO"
+}
+
+variable "error_alarm_threshold" {
+  type    = number
+  default = 1
+}
+
+variable "alarm_actions" {
+  type    = list(string)
+  default = []
+}
+
+variable "tags" {
+  type    = map(string)
+  default = {}
+}

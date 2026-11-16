@@ -1,0 +1,137 @@
+# UsageHub
+
+**Observabilidad centralizada de consumo de IA y nube (FinOps).** Un solo dashboard para saber
+cuánto gasta la organización en **Claude (Anthropic)**, **OpenAI**, **Gemini (Google)**, **AWS** o
+cualquier otro sistema, y **quién** de cada equipo lo consume.
+
+[![CI](https://img.shields.io/badge/CI-GitHub_Actions-blue)](.github/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.13-blue)
+![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
+![mypy](https://img.shields.io/badge/mypy-strict-blue)
+![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC)
+
+> Prototipo (PoC) del proyecto de Arquitectura de Software, Arquitectura Empresarial y Gobierno de TI.
+> Los artefactos de arquitectura (C4, ADR, escenarios de calidad, TOGAF/COBIT) y el artículo
+> están en el repositorio hermano [`usage-hub-architecture`](../usage-hub-architecture).
+
+## El reto técnico
+
+Los proveedores entregan datos de consumo **tarde (4-24 h), revisables y en formatos distintos**,
+y AWS SQS entrega mensajes **al menos una vez**. Sumar ingenuamente cada lectura duplica el gasto
+reportado. UsageHub implementa un **ledger idempotente con deltas** sobre DynamoDB:
+
+- cada hecho tiene una clave natural determinista (`tenant|provider|service|principal|día`);
+- un *upsert* calcula la diferencia entre la versión anterior y la nueva (`domain/ledger.py`);
+- hecho + deltas de agregados se escriben en **una transacción** con **control de concurrencia
+  optimista** (`version = :v`) y reintentos con *full jitter* (`adapters/dynamodb.py`).
+
+Resultado: **efecto exactamente-una-vez** sobre los agregados, verificado con pruebas basadas en
+propiedades (Hypothesis) y con pruebas de carga que inyectan 15 % de duplicados.
+
+## Arquitectura
+
+```mermaid
+flowchart LR
+  subgraph Fuentes
+    A[Anthropic<br/>Usage & Cost API]:::ext
+    O[OpenAI<br/>Usage & Costs API]:::ext
+    G[Google<br/>Billing → BigQuery]:::ext
+    W[AWS<br/>Cost Explorer]:::ext
+    X[Cualquier sistema<br/>POST /v1/usage/records]:::ext
+  end
+  EB[EventBridge Scheduler<br/>cada hora] --> SCH[λ scheduler<br/>fan-out]
+  SCH --> Q[(SQS work + DLQ)]
+  X --> APIGW[API Gateway HTTP<br/>JWT Cognito + throttling] --> API[λ api]
+  API -- 202 --> Q
+  Q --> COL[λ collector<br/>partial batch]
+  COL -- pull --> A & O & G & W
+  COL -- TransactWriteItems --> DDB[(DynamoDB<br/>hechos + agregados)]
+  API -- query --> DDB
+  SPA[Dashboard SPA<br/>CloudFront + S3] --> APIGW
+  BUD[λ budget diario] --> DDB
+  BUD --> SNS[SNS alertas]
+  classDef ext fill:#eee,stroke:#999,color:#333
+```
+
+| Capa | Paquete | Patrones |
+|---|---|---|
+| Dominio | `usage_hub.domain` | Modelo canónico, *Value Objects*, puertos (hexagonal) |
+| Aplicación | `usage_hub.services` | Casos de uso, CQRS (modelo de lectura agregado) |
+| Conectores | `usage_hub.connectors` | Adapter + Strategy + Registry (plug-in, Open/Closed) |
+| Infraestructura | `usage_hub.adapters` | Repository, Optimistic Concurrency, Retry + Jitter |
+| Entrada | `usage_hub.handlers` | Composition Root, Competing Consumers, DLQ |
+
+## Inicio rápido (sin AWS)
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+python scripts/local_server.py                       # http://localhost:8080 con datos sintéticos
+```
+
+## Calidad
+
+```bash
+make check          # ruff + mypy --strict + pytest (unitarias, integración con moto, propiedades)
+```
+
+| Métrica | Valor |
+|---|---|
+| Pruebas | 65 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Cobertura de ramas | 94,7 % (umbral de CI: 80 %) |
+| Tipado | `mypy --strict` sin errores |
+| Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
+
+## Despliegue en AWS
+
+```bash
+python scripts/build_lambda.py            # dist/app.zip + dist/layer.zip para Lambda arm64
+cd infra/terraform/envs/dev && cp terraform.tfvars.example terraform.tfvars
+terraform init && terraform apply
+```
+
+Pasos completos (alta de usuarios, conectores, alarmas): [docs/runbook.md](docs/runbook.md).
+Modelo de amenazas: [docs/security.md](docs/security.md). Contrato de la API: [docs/openapi.yaml](docs/openapi.yaml).
+
+## Pruebas de estrés
+
+| Herramienta | Uso |
+|---|---|
+| [`tests/load/k6_ingest.js`](tests/load/k6_ingest.js) | Escenarios `load`, `stress`, `spike`, `soak` contra la ruta de escritura en AWS |
+| [`tests/load/k6_dashboard.js`](tests/load/k6_dashboard.js) | Carga sobre el modelo de lectura |
+| [`scripts/loadgen.py`](scripts/loadgen.py) | Generador Python con inyección de duplicados y **verificación de consistencia** |
+
+```bash
+make load-test SCENARIO=stress BASE_URL=https://<api> TOKEN=<access_token_m2m>
+python scripts/loadgen.py --base-url https://<api> --token <token> --scenario spike --rps 100 --duration 300
+```
+
+Los resultados medidos están en [`docs/results/`](docs/results/).
+
+## Estructura
+
+```
+src/usage_hub/
+  domain/        modelo canónico, ledger (deltas), puertos
+  services/      ingesta, dashboard (CQRS), presupuestos
+  connectors/    anthropic_admin, openai_admin, aws_cost_explorer, google_billing, synthetic
+  adapters/      dynamodb (single-table), aws (SQS/SNS/Secrets), memory
+  handlers/      api, collector, scheduler, budget (+ bootstrap = composition root)
+frontend/        SPA sin build step (Chart.js), OAuth2 PKCE con Cognito
+infra/terraform/ módulos reutilizables (lambda_function, sqs_queue, static_site, cost_reader_role) + envs/dev
+tests/           unit/, integration/ (moto), load/ (k6)
+scripts/         local_server, build_lambda, loadgen
+```
+
+## Agregar un proveedor nuevo
+
+1. Crear `src/usage_hub/connectors/<proveedor>.py` con una clase que implemente `fetch(tenant_id, window)`
+   y devuelva `UsageRecord`.
+2. Registrar la fábrica con `@register(Provider.X)` y añadir el módulo a `_LAZY_MODULES`.
+3. Escribir la prueba de contrato con una respuesta grabada del proveedor.
+
+Ningún otro componente cambia: ni el ledger, ni la API, ni el dashboard.
+
+## Licencia
+
+MIT

@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+import json
+from collections.abc import Iterator
+
+import boto3
+import pytest
+from moto import mock_aws
+
+from usage_hub.adapters.aws import SecretsManagerProvider, SnsAlertPublisher, SqsWorkQueue
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+def aws() -> Iterator[None]:
+    with mock_aws():
+        yield
+
+
+def test_secrets_are_cached(aws: None) -> None:
+    client = boto3.client("secretsmanager")
+    client.create_secret(
+        Name="usagehub/acme/openai", SecretString=json.dumps({"admin_api_key": "v1"})
+    )
+    provider = SecretsManagerProvider(client, ttl_seconds=60)
+    assert provider.get_secret("usagehub/acme/openai") == {"admin_api_key": "v1"}
+    client.put_secret_value(
+        SecretId="usagehub/acme/openai", SecretString=json.dumps({"admin_api_key": "v2"})
+    )
+    assert provider.get_secret("usagehub/acme/openai")["admin_api_key"] == "v1"  # cacheado
+    assert (
+        SecretsManagerProvider(client, ttl_seconds=0).get_secret("usagehub/acme/openai")[
+            "admin_api_key"
+        ]
+        == "v2"
+    )
+
+
+def test_sqs_batches_in_groups_of_ten(aws: None) -> None:
+    client = boto3.client("sqs")
+    url = client.create_queue(QueueName="work")["QueueUrl"]
+    assert SqsWorkQueue(client, url).send_batch([{"i": i} for i in range(23)]) == 23
+    attrs = client.get_queue_attributes(
+        QueueUrl=url, AttributeNames=["ApproximateNumberOfMessages"]
+    )
+    assert attrs["Attributes"]["ApproximateNumberOfMessages"] == "23"
+
+
+def test_sns_publish(aws: None) -> None:
+    client = boto3.client("sns")
+    arn = client.create_topic(Name="alerts")["TopicArn"]
+    SnsAlertPublisher(client, arn).publish("x" * 200, {"a": 1})  # el subject se trunca a 100
