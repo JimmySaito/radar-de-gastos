@@ -20,6 +20,8 @@ _LAZY_MODULES: dict[Provider, str] = {
     Provider.AWS: "usage_hub.connectors.aws_cost_explorer",
     Provider.GOOGLE: "usage_hub.connectors.google_billing",
     Provider.SYNTHETIC: "usage_hub.connectors.synthetic",
+    Provider.CLAUDE_CODE: "usage_hub.connectors.claude_code_local",
+    Provider.SUBSCRIPTION: "usage_hub.connectors.subscription",
 }
 
 

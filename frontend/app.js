@@ -3,8 +3,8 @@
 //        #/configuracion/{conexiones|personas|presupuestos|ingesta}.
 // authMode "cognito": OAuth 2.0 Authorization Code + PKCE.  authMode "local": servidor local.
 
-const PROVIDER_ORDER = ["anthropic", "openai", "google", "aws", "custom", "synthetic"];
-const PROVIDER_LABEL = { anthropic: "Anthropic (Claude)", openai: "OpenAI", google: "Google (Gemini)", aws: "AWS", custom: "Personalizado", synthetic: "Generador de prueba" };
+const PROVIDER_ORDER = ["anthropic", "openai", "google", "aws", "claude_code", "custom", "synthetic"];
+const PROVIDER_LABEL = { anthropic: "Anthropic (Claude)", openai: "OpenAI", google: "Google (Gemini)", aws: "AWS", claude_code: "Claude Code (estimado)", custom: "Personalizado", synthetic: "Generador de prueba", subscription: "Suscripción" };
 const state = { days: 30, groupBy: "provider", config: null, me: null, charts: {}, catalog: null, editing: null };
 
 const $ = (id) => document.getElementById(id);
@@ -361,9 +361,12 @@ function fieldInput(f, conn) {
   const value = f.secret ? "" : (conn?.options?.[f.name] ?? f.default ?? "");
   const placeholder = f.secret && saved ? "•••••••• guardado — deja vacío para conservarlo" : f.placeholder;
   const common = `id="f_${esc(f.name)}" name="${esc(f.name)}" placeholder="${esc(placeholder)}" ${f.required && !(f.secret && saved) ? "required" : ""} autocomplete="off"`;
+  const types = { password: "password", number: "number", date: "date" };
   const input = f.kind === "textarea"
     ? `<textarea ${common} spellcheck="false">${esc(value)}</textarea>`
-    : `<input ${common} type="${f.kind === "password" ? "password" : f.kind === "number" ? "number" : "text"}" value="${esc(value)}">`;
+    : f.kind === "select"
+      ? `<select id="f_${esc(f.name)}" name="${esc(f.name)}">${f.choices.map(([v, label]) => `<option value="${esc(v)}" ${v === value ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>`
+      : `<input ${common} type="${types[f.kind] || "text"}" ${f.kind === "number" ? 'step="any" min="0"' : ""} value="${esc(value)}">`;
   return `<div class="field"><label for="f_${esc(f.name)}">${esc(f.label)}${f.required ? "" : ' <span class="muted">(opcional)</span>'}</label>${input}${f.help ? `<div class="help">${esc(f.help)}</div>` : ""}</div>`;
 }
 
@@ -511,7 +514,7 @@ async function renderBudgetAdmin(panel) {
       <datalist id="teamList2">${teams.map((t) => `<option value="${esc(t)}">`).join("")}</datalist>
       <form class="inline-form" id="budgetForm">
         <div class="field"><label for="b_team">Equipo</label><input id="b_team" name="team" list="teamList2" required></div>
-        <div class="field"><label for="b_provider">Proveedor</label><select id="b_provider" name="provider"><option value="">Todos</option>${PROVIDER_ORDER.slice(0, 5).map((p) => `<option value="${p}">${esc(providerName(p))}</option>`).join("")}</select></div>
+        <div class="field"><label for="b_provider">Proveedor</label><select id="b_provider" name="provider"><option value="">Todos</option>${PROVIDER_ORDER.filter((p) => p !== "synthetic").map((p) => `<option value="${p}">${esc(providerName(p))}</option>`).join("")}</select></div>
         <div class="field"><label for="b_limit">Límite mensual (USD)</label><input id="b_limit" name="monthly_limit" type="number" min="1" step="0.01" required></div>
         <button class="btn primary" type="submit">Guardar</button>
       </form></section>`;

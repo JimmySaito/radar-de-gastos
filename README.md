@@ -94,10 +94,27 @@ configuración se conserva y los últimos 30 días se resincronizan solos.
 
 | Proveedor | Qué credencial pide |
 |---|---|
-| Anthropic (Claude) | Admin API key `sk-ant-admin…` (requiere una organización en Claude Console) |
+| Anthropic (Claude) | API key con alcance de **organización** (no de espacio de trabajo) ligada a un usuario admin o cuenta de servicio, o una Admin key `sk-ant-admin…` |
 | OpenAI | Admin key `sk-admin-…` (owner de la organización) |
 | AWS | Nada en local (usa tu perfil de AWS CLI) u opcionalmente un rol a asumir con External ID |
 | Google | Service account JSON + tabla de la exportación de facturación a BigQuery (`pip install -e ".[gcp]"`) |
+| Claude Code (este equipo) | Nada: lee los registros locales de `~/.claude/projects` (tokens exactos; costo = equivalente en API, estimado) |
+| Suscripción (costo fijo) | Proveedor, plan, tarifa mensual y persona (p. ej. Claude Max, USD 100/mes, Jimmy); se prorratea por día |
+
+### Consumo con suscripción (claude.ai, Claude Code Pro/Max)
+
+Los planes individuales y Team no tienen API de uso. UsageHub los cubre de dos maneras:
+
+- **Claude Code:** el conector *Claude Code (este equipo)* lee las sesiones locales, deduplica las respuestas
+  (una misma respuesta aparece en varias líneas al transmitirse) y calcula el **costo equivalente en API** con la
+  tabla de `connectors/pricing.py`. Sirve para comparar uso y valor; lo que pagas es la tarifa del plan.
+  En un equipo, cada persona envía su consumo a la instancia central:
+
+  ```bash
+  python scripts/push_claude_code.py --api https://<api> --token "$TOKEN" --user ana@empresa.com --days 7
+  ```
+- **Tarifa del plan (claude.ai, ChatGPT, Gemini…):** el conector *Suscripción (costo fijo)* registra el gasto
+  real del plan, prorrateado por día, en las mismas series y presupuestos que el consumo variable.
 
 ## Calidad
 
@@ -107,8 +124,8 @@ make check          # ruff + mypy --strict + pytest (unitarias, integración con
 
 | Métrica | Valor |
 |---|---|
-| Pruebas | 87 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
-| Cobertura de ramas | 95,2 % (umbral de CI: 80 %) |
+| Pruebas | 94 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Cobertura de ramas | 95,5 % (umbral de CI: 80 %) |
 | Tipado | `mypy --strict` sin errores |
 | Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
 

@@ -221,7 +221,7 @@ def test_connection_lifecycle_via_api(memory_env: bootstrap.Container) -> None:
 def test_connection_validation_errors(memory_env: bootstrap.Container) -> None:
     missing_key = {"provider": "anthropic", "values": {}}
     status, payload = call(http_event("PUT", "/v1/connectors", claims=USER, body=missing_key))
-    assert status == 400 and "Admin API key" in payload["message"]
+    assert status == 400 and "alcance de organización" in payload["message"]
     unknown = {"provider": "openai", "values": {"admin_api_key": "k", "hack": "1"}}
     assert call(http_event("PUT", "/v1/connectors", claims=USER, body=unknown))[0] == 400
     status, result = call(http_event("POST", "/v1/connectors/test", claims=USER, body=missing_key))

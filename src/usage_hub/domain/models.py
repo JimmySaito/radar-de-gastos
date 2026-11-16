@@ -32,6 +32,10 @@ class Provider(StrEnum):
     AWS = "aws"
     CUSTOM = "custom"
     SYNTHETIC = "synthetic"
+    # Uso de Claude Code leído de sus registros locales (costo = equivalente en API, estimado).
+    CLAUDE_CODE = "claude_code"
+    # Tipo de conector para costos fijos (suscripciones); sus registros usan el proveedor real.
+    SUBSCRIPTION = "subscription"
 
 
 class UsageRecord(BaseModel):

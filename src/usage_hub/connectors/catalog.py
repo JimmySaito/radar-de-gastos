@@ -13,7 +13,7 @@ from typing import Any, Literal
 
 from usage_hub.domain.models import Provider
 
-FieldKind = Literal["text", "password", "textarea", "number"]
+FieldKind = Literal["text", "password", "textarea", "number", "select", "date"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +26,7 @@ class FieldSpec:
     placeholder: str = ""
     help: str = ""
     default: str = ""
+    choices: tuple[tuple[str, str], ...] = ()  # (valor, etiqueta) para kind="select"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,12 +63,14 @@ CATALOG: dict[Provider, ProviderSpec] = {
             fields=(
                 FieldSpec(
                     "admin_api_key",
-                    "Admin API key",
+                    "API key con alcance de organización",
                     kind="password",
                     secret=True,
-                    placeholder="sk-ant-admin...",
-                    help="Claude Console → Settings → Admin keys. Requiere una organización; "
-                    "en Claude Enterprise use una key con scope read:analytics.",
+                    placeholder="sk-ant-...",
+                    help="Claude Console → Claves → Crear clave, con alcance «Organización» "
+                    "(no un espacio de trabajo) y ligada a un usuario admin o a una cuenta de "
+                    "servicio. También sirve una Admin key (sk-ant-admin...). En Claude "
+                    "Enterprise: key con scope read:analytics.",
                 ),
             ),
             notes="Los datos llegan con 4-24 h de retraso.",
@@ -145,6 +148,63 @@ CATALOG: dict[Provider, ProviderSpec] = {
             notes="Requiere `pip install usage-hub[gcp]`.",
         ),
         ProviderSpec(
+            provider=Provider.CLAUDE_CODE,
+            name="Claude Code (este equipo)",
+            description="Tokens exactos de Claude Code leídos de sus registros locales, "
+            "también con suscripción Pro/Max.",
+            docs_url="https://code.claude.com/docs/en/monitoring-usage",
+            fields=(
+                FieldSpec(
+                    "path",
+                    "Carpeta de Claude Code",
+                    required=False,
+                    default="~/.claude",
+                    help="Donde Claude Code guarda sus sesiones (subcarpeta projects).",
+                ),
+                FieldSpec(
+                    "user",
+                    "Persona",
+                    required=False,
+                    placeholder="usuario del sistema",
+                    help="De quién es este consumo. Vacío = usuario del sistema operativo.",
+                ),
+            ),
+            notes="El costo es el equivalente en API (estimado); con suscripción pagas una "
+            "tarifa fija. Para un equipo, cada persona usa scripts/push_claude_code.py.",
+        ),
+        ProviderSpec(
+            provider=Provider.SUBSCRIPTION,
+            name="Suscripción (costo fijo)",
+            description="Planes con tarifa mensual: Claude Pro/Max/Team, ChatGPT Plus/Team, "
+            "Gemini, etc. Se prorratea por día.",
+            docs_url="",
+            fields=(
+                FieldSpec(
+                    "vendor",
+                    "Proveedor",
+                    kind="select",
+                    default="anthropic",
+                    choices=(
+                        ("anthropic", "Anthropic (Claude)"),
+                        ("openai", "OpenAI (ChatGPT)"),
+                        ("google", "Google (Gemini)"),
+                        ("aws", "AWS"),
+                        ("custom", "Otro"),
+                    ),
+                ),
+                FieldSpec("plan", "Plan", placeholder="Claude Max"),
+                FieldSpec("monthly_cost", "Tarifa mensual (USD)", kind="number", placeholder="100"),
+                FieldSpec("member", "Persona", placeholder="nombre@empresa.com"),
+                FieldSpec(
+                    "start_date",
+                    "Desde",
+                    kind="date",
+                    required=False,
+                    help="Opcional: fecha de alta del plan.",
+                ),
+            ),
+        ),
+        ProviderSpec(
             provider=Provider.SYNTHETIC,
             name="Generador de prueba",
             description="Datos sintéticos para probar el flujo completo sin credenciales.",
@@ -200,4 +260,11 @@ def split_values(
                 options[f.name] = value
         if f.required and not value:
             raise InvalidConfigurationError(f"falta el campo obligatorio: {f.label}")
+        if value and f.choices and value not in {c for c, _ in f.choices}:
+            raise InvalidConfigurationError(f"valor no válido para {f.label}: {value}")
+        if value and f.kind == "number":
+            try:
+                float(value.replace(",", "."))
+            except ValueError as exc:
+                raise InvalidConfigurationError(f"{f.label} debe ser un número") from exc
     return secrets, options
