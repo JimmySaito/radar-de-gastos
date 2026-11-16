@@ -96,9 +96,23 @@
     <!-- ============================================================ CONFIGURACIÓN -->
     <section id="settings" hidden>
       <div class="settings-head">
-        <a class="link" href="#/real">← Volver al dashboard</a>
-        <h1>Configuración</h1>
-        <p class="muted">Conecta tus proveedores, asigna el consumo a personas y equipos y define presupuestos.</p>
+        <nav class="breadcrumb" aria-label="Ruta de navegación">
+          <a href="#/real" id="crumbView">Datos reales</a>
+          <span aria-hidden="true">›</span>
+          <span>Configuración</span>
+          <span aria-hidden="true">›</span>
+          <span aria-current="page" id="crumbTab">Conexiones</span>
+        </nav>
+        <div class="settings-title">
+          <a class="btn back" href="#/real" id="backBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span id="backLabel">Volver al dashboard</span>
+          </a>
+          <div>
+            <h1>Configuración</h1>
+            <p class="muted">Conecta tus proveedores, asigna el consumo a personas y equipos y define presupuestos de tus <strong>datos reales</strong> (el ejemplo no se modifica). <kbd>Esc</kbd> para salir.</p>
+          </div>
+        </div>
       </div>
       <div class="settings-layout">
         <nav class="tabs" aria-label="Secciones de configuración">

@@ -5,7 +5,9 @@
 
 const PROVIDER_ORDER = ["anthropic", "openai", "google", "aws", "claude_code", "custom", "synthetic"];
 const PROVIDER_LABEL = { anthropic: "Anthropic (Claude)", openai: "OpenAI", google: "Google (Gemini)", aws: "AWS", claude_code: "Claude Code (estimado)", custom: "Personalizado", synthetic: "Generador de prueba", subscription: "Suscripción" };
-const state = { days: 30, groupBy: "provider", config: null, me: null, charts: {}, catalog: null, editing: null };
+const state = { days: 30, groupBy: "provider", config: null, me: null, charts: {}, catalog: null, editing: null, lastView: "real" };
+const TAB_LABEL = { conexiones: "Conexiones", personas: "Personas y equipos", presupuestos: "Presupuestos", ingesta: "Ingesta por API" };
+const VIEW_LABEL = { real: "Datos reales", ejemplo: "Ejemplo" };
 
 const $ = (id) => document.getElementById(id);
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -117,8 +119,21 @@ async function render() {
   $("dashboard").hidden = isSettings;
   $("settings").hidden = !isSettings;
   $("filters").hidden = isSettings;
-  $("settingsLink").hidden = !state.me?.is_admin;
-  if (isSettings) $("settingsLink").setAttribute("aria-current", "page"); else $("settingsLink").removeAttribute("aria-current");
+  if (!isSettings) state.lastView = isDemo ? "ejemplo" : "real";
+  const back = `#/${state.lastView}`;
+  const gear = $("settingsLink");
+  gear.hidden = !state.me?.is_admin;
+  // El engranaje es un interruptor: abre Configuración y, estando dentro, vuelve al dashboard.
+  gear.href = isSettings ? back : `#/configuracion/${state.lastTab || "conexiones"}`;
+  gear.setAttribute("aria-label", isSettings ? "Cerrar configuración" : "Configuración");
+  gear.title = gear.getAttribute("aria-label");
+  if (isSettings) gear.setAttribute("aria-current", "page"); else gear.removeAttribute("aria-current");
+  $("backBtn").href = back;
+  $("crumbView").href = back;
+  $("crumbView").textContent = VIEW_LABEL[state.lastView];
+  $("backLabel").textContent = `Volver a ${VIEW_LABEL[state.lastView]}`;
+  if (isSettings) { state.lastTab = tab; $("crumbTab").textContent = TAB_LABEL[tab] || tab; }
+  document.title = isSettings ? `${TAB_LABEL[tab] || "Configuración"} · Configuración · UsageHub` : `${VIEW_LABEL[state.lastView]} · UsageHub`;
   $("banner").hidden = true;
   if (isSettings) await renderSettings(tab);
   else await renderDashboard(isDemo);
@@ -581,6 +596,15 @@ function watchPixelRatio() {
   }, { once: true });
 }
 
+// Esc: primero cierra un formulario abierto; si no hay ninguno, sale de Configuración.
+function onEscape(event) {
+  if (event.key !== "Escape" || route().section !== "configuracion") return;
+  const form = $("connForm");
+  if (form && form.innerHTML.trim()) { form.innerHTML = ""; return; }
+  if (event.target.closest?.("input, textarea, select")) { event.target.blur(); return; }
+  location.hash = `#/${state.lastView}`;
+}
+
 // ------------------------------------------------------------------ arranque
 async function main() {
   state.config = await fetch("/config.json").then((r) => r.json()).catch(() => ({ apiBaseUrl: "", authMode: "local", tenant: "local" }));
@@ -597,6 +621,7 @@ async function main() {
     btn.textContent = el.hidden ? "Ver tabla" : "Ocultar tabla";
   }));
   window.addEventListener("hashchange", render);
+  document.addEventListener("keydown", onEscape);
   watchPixelRatio();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
   await render();
