@@ -27,6 +27,31 @@ QueryParams = list[tuple[str, str | int | float | bool | None]]
 _RETRYABLE = {408, 409, 429, 500, 502, 503, 504}
 
 
+_HINTS = {
+    "expired_secret_key": "la llave venció: crea una nueva Admin key.",
+    "invalid_api_key": "la llave no es válida.",
+}
+
+
+class OpenAIAPIError(httpx.HTTPStatusError):
+    """Error con el motivo que devuelve OpenAI (no el texto genérico de httpx) y una pista."""
+
+    def __init__(self, response: httpx.Response) -> None:
+        code, message = "", response.reason_phrase
+        try:
+            error = response.json().get("error") or {}
+            code, message = str(error.get("code") or ""), str(error.get("message") or message)
+        except ValueError:
+            pass
+        hint = _HINTS.get(code, "")
+        if response.status_code in {401, 403} and not hint:
+            hint = "se requiere una Admin key de organización (sk-admin-...), no una de proyecto."
+        text = f"OpenAI {response.status_code} {code}: {message}".strip()
+        super().__init__(
+            f"{text} → {hint}" if hint else text, request=response.request, response=response
+        )
+
+
 class OpenAIUsageConnector:
     provider = Provider.OPENAI
 
@@ -104,7 +129,8 @@ class OpenAIUsageConnector:
         for attempt in range(1, self._max_attempts + 1):
             response = self._client.get(path, params=params)
             if response.status_code not in _RETRYABLE or attempt == self._max_attempts:
-                response.raise_for_status()
+                if response.is_error:
+                    raise OpenAIAPIError(response)
                 result: dict[str, Any] = response.json()
                 return result
             retry_after = float(response.headers.get("retry-after", 2**attempt))

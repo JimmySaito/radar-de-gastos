@@ -288,3 +288,25 @@ def test_registry_rejects_unknown_provider() -> None:
     config = ConnectorConfig(tenant_id="acme", connector_id="c", provider=Provider.CUSTOM)
     with pytest.raises(UnknownProviderError):
         build_connector(config, {})
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [
+        (
+            401,
+            {"error": {"code": "expired_secret_key", "message": "Your API key has expired."}},
+            "la llave venció",
+        ),
+        (403, {"error": {"code": None, "message": "Insufficient permissions"}}, "sk-admin-"),
+        (400, {"error": {"code": "bad", "message": "nope"}}, "OpenAI 400 bad: nope"),
+    ],
+)
+def test_openai_errors_explain_the_cause(status: int, body: dict[str, Any], expected: str) -> None:
+    base = "https://api.openai.test/v1"
+    respx.get(f"{base}/organization/usage/completions").mock(
+        return_value=httpx.Response(status, json=body)
+    )
+    with pytest.raises(httpx.HTTPStatusError, match=expected):
+        list(OpenAIUsageConnector(httpx.Client(base_url=base)).fetch("acme", WINDOW))
