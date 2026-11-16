@@ -117,7 +117,8 @@ async function render() {
   $("dashboard").hidden = isSettings;
   $("settings").hidden = !isSettings;
   $("filters").hidden = isSettings;
-  $("settingsLink").hidden = isDemo || isSettings || !state.me?.is_admin;
+  $("settingsLink").hidden = !state.me?.is_admin;
+  if (isSettings) $("settingsLink").setAttribute("aria-current", "page"); else $("settingsLink").removeAttribute("aria-current");
   $("banner").hidden = true;
   if (isSettings) await renderSettings(tab);
   else await renderDashboard(isDemo);
@@ -560,6 +561,17 @@ function renderIngest(panel) {
       <p class="muted" style="margin-bottom:0">Hasta 1.000 registros por petición. Contrato completo: <code>docs/openapi.yaml</code>.</p></section>`;
 }
 
+// Redibuja las gráficas cuando cambia la densidad de píxeles (zoom del navegador, mover la
+// ventana a otro monitor). Si el contenedor no cambia de tamaño, Chart.js no se entera y el
+// canvas queda escalado y borroso.
+function watchPixelRatio() {
+  const query = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  query.addEventListener("change", () => {
+    Object.values(state.charts).forEach((chart) => chart?.resize());
+    watchPixelRatio();
+  }, { once: true });
+}
+
 // ------------------------------------------------------------------ arranque
 async function main() {
   state.config = await fetch("/config.json").then((r) => r.json()).catch(() => ({ apiBaseUrl: "", authMode: "local", tenant: "local" }));
@@ -576,6 +588,7 @@ async function main() {
     btn.textContent = el.hidden ? "Ver tabla" : "Ocultar tabla";
   }));
   window.addEventListener("hashchange", render);
+  watchPixelRatio();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
   await render();
 }
