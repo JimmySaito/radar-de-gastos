@@ -155,12 +155,15 @@ class Handler(BaseHTTPRequestHandler):
         target = (FRONTEND / (path.lstrip("/") or "index.html")).resolve()
         if not target.is_relative_to(FRONTEND) or not target.is_file():
             target = FRONTEND / "index.html"
+        payload = target.read_bytes()
         self.send_response(200)
         self.send_header(
             "content-type", mimetypes.guess_type(target.name)[0] or "application/octet-stream"
         )
+        # Obligatorio con HTTP/1.1 keep-alive: sin él, el navegador espera más bytes indefinidamente.
+        self.send_header("content-length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(target.read_bytes())
+        self.wfile.write(payload)
 
     def do_GET(self) -> None:
         if self.path.startswith("/v1/"):
@@ -184,8 +187,13 @@ class Handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self._api("OPTIONS")
 
+    verbose = False
+
     def log_message(self, fmt: str, *args: Any) -> None:
-        sys.stderr.write(f"{self.command} {self.path} -> {args[1] if len(args) > 1 else ''}\n")
+        # Por defecto no se escribe en consola: en Windows, si la ventana entra en modo
+        # selección (QuickEdit), cualquier escritura bloquea el hilo y la petición se cuelga.
+        if self.verbose:
+            sys.stderr.write(f"{self.command} {self.path} -> {args[1] if len(args) > 1 else ''}\n")
 
 
 def main() -> None:
@@ -193,9 +201,11 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--days", type=int, default=60)
     parser.add_argument("--members", type=int, default=12)
+    parser.add_argument("--verbose", action="store_true", help="registra cada petición en consola")
     args = parser.parse_args()
+    Handler.verbose = args.verbose
     seed(args.days, args.members)
-    print(f"UsageHub local en http://localhost:{args.port}")
+    print(f"UsageHub local en http://localhost:{args.port}  (Ctrl+C para detener)", flush=True)
     ThreadingHTTPServer.request_queue_size = (
         512  # backlog por defecto (5) rechaza conexiones bajo carga
     )
