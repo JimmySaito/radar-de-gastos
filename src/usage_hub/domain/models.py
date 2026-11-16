@@ -8,7 +8,7 @@ a ``UsageRecord``, el único contrato que conoce el resto del sistema.
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Self
@@ -187,6 +187,7 @@ class ConnectorConfig(BaseModel):
     tenant_id: TenantId
     connector_id: Identifier
     provider: Provider
+    label: str = Field(default="", max_length=120)
     secret_arn: str | None = None
     enabled: bool = True
     lookback_days: int = Field(default=3, ge=1, le=31)
@@ -204,3 +205,17 @@ class Budget(BaseModel):
     monthly_limit: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     currency: CurrencyCode = "USD"
     alert_thresholds: tuple[Decimal, ...] = (Decimal("0.5"), Decimal("0.8"), Decimal("1.0"))
+
+
+class ConnectorStatus(BaseModel):
+    """Resultado de la última sincronización de un conector (soportabilidad y UX)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    last_sync_at: datetime
+    ok: bool
+    written: int = 0
+    unchanged: int = 0
+    error: str | None = None
+    window_start: date | None = None
+    window_end: date | None = None

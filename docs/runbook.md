@@ -21,25 +21,36 @@ aws cognito-idp admin-create-user --user-pool-id "$POOL" --username admin@empres
 aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL" --username admin@empresa.com --group-name admins
 ```
 
-## 3. Registrar conectores
+## 3. Cargar la vista de ejemplo
 
-1. Guardar la credencial **de solo lectura** en Secrets Manager (el prefijo `usagehub/` es obligatorio por IAM):
+```bash
+python scripts/seed_demo.py --table "$(terraform output -raw table_name)" --region us-east-1
+```
 
-   | Proveedor | Secreto (JSON) |
-   |---|---|
-   | Anthropic | `{"admin_api_key": "sk-ant-admin..."}` |
-   | OpenAI | `{"admin_api_key": "sk-admin-..."}` |
-   | AWS | `{"role_arn": "arn:aws:iam::<payer>:role/usagehub-cost-reader", "external_id": "..."}` |
-   | Google | `{"service_account_json": "{...}"}` + opción `billing_table` |
+Registra el conector sintético del tenant `demo` (el scheduler lo mantiene al día), sus mapeos y presupuestos.
 
-   ```bash
-   aws secretsmanager create-secret --name usagehub/acme/anthropic --secret-string '{"admin_api_key":"..."}'
-   ```
+## 4. Registrar conectores
 
-2. Registrar el conector vía API (`PUT /v1/connectors`) con el ARN del secreto.
-3. Mapear identidades técnicas a personas/equipos (`PUT /v1/mappings`).
+**Desde el dashboard (recomendado):** *Datos reales → Configuración → Conexiones*. La API guarda la credencial
+en Secrets Manager (`usagehub/{tenant}/{conexión}`) y la configuración solo conserva el ARN.
 
-## 4. Respuesta a alarmas
+**Por API (automatización):** la misma operación que usa la pantalla.
+
+```bash
+curl -X PUT "$API/v1/connectors" -H "Authorization: Bearer $ID_TOKEN_ADMIN" -H "content-type: application/json"   -d '{"provider":"anthropic","label":"Claude producción","values":{"admin_api_key":"sk-ant-admin..."}}'
+curl -X POST "$API/v1/connectors/<connector_id>/sync?days=30" -H "Authorization: Bearer $ID_TOKEN_ADMIN"
+```
+
+| Proveedor | `values` |
+|---|---|
+| Anthropic | `{"admin_api_key": "sk-ant-admin..."}` |
+| OpenAI | `{"admin_api_key": "sk-admin-..."}` |
+| AWS | `{"role_arn": "arn:aws:iam::<payer>:role/usagehub-cost-reader", "external_id": "...", "owner_tag": "owner"}` |
+| Google | `{"service_account_json": "{...}", "billing_table": "proyecto.dataset.tabla"}` |
+
+Después, mapear identidades técnicas a personas y equipos (*Configuración → Personas y equipos* o `PUT /v1/mappings`).
+
+## 5. Respuesta a alarmas
 
 | Alarma | Significado | Acción |
 |---|---|---|
@@ -49,11 +60,11 @@ aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL" --username admin@
 | `*-api-latency-p95` | p95 > 800 ms | Revisar tamaño de rangos consultados; considerar caché (ADR-0007, trabajo futuro). |
 | `*-<función>-errors` | Excepciones no controladas | Logs con `correlation_id`. |
 
-## 5. Rotación de credenciales
+## 6. Rotación de credenciales
 
-Actualizar el valor del secreto; los Lambdas lo recargan en ≤ 5 min (caché TTL). No requiere redespliegue.
+Desde Configuración → Editar, pegar la nueva llave (los campos vacíos conservan la anterior), o actualizar el secreto directamente. Los Lambdas lo recargan en ≤ 5 min (caché TTL). No requiere redespliegue.
 
-## 6. Recuperación ante desastres
+## 7. Recuperación ante desastres
 
 - **RPO** ≤ 5 min: DynamoDB PITR (35 días). **RTO** ≈ 30 min: `terraform apply` en otra región + restauración PITR.
 - Los hechos son reconstruibles desde los proveedores (≤ 365 días en Anthropic/OpenAI): ejecutar el scheduler con `lookback_days` amplio.

@@ -7,7 +7,7 @@ resource "aws_apigatewayv2_api" "http" {
   # el dominio de CloudFront crearía un ciclo de dependencias (CSP ↔ CORS).
   cors_configuration {
     allow_origins = ["*"]
-    allow_methods = ["GET", "POST", "PUT", "OPTIONS"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     allow_headers = ["authorization", "content-type"]
     max_age       = 600
   }
@@ -30,20 +30,28 @@ resource "aws_apigatewayv2_integration" "api" {
   integration_type       = "AWS_PROXY"
   integration_uri        = module.api_fn.invoke_arn
   payload_format_version = "2.0"
-  timeout_milliseconds   = 10000
+  timeout_milliseconds   = 30000
 }
 
 locals {
   protected_routes = [
+    "GET /v1/me",
     "GET /v1/summary",
     "GET /v1/timeseries",
+    "GET /v1/identities",
     "POST /v1/usage/records",
-    "GET /v1/mappings",
-    "PUT /v1/mappings",
+    "GET /v1/providers",
     "GET /v1/connectors",
     "PUT /v1/connectors",
+    "POST /v1/connectors/test",
+    "POST /v1/connectors/{connector_id}/sync",
+    "DELETE /v1/connectors/{connector_id}",
+    "GET /v1/mappings",
+    "PUT /v1/mappings",
+    "DELETE /v1/mappings",
     "GET /v1/budgets",
     "PUT /v1/budgets",
+    "DELETE /v1/budgets",
   ]
 }
 

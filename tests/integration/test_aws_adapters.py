@@ -51,3 +51,15 @@ def test_sns_publish(aws: None) -> None:
     client = boto3.client("sns")
     arn = client.create_topic(Name="alerts")["TopicArn"]
     SnsAlertPublisher(client, arn).publish("x" * 200, {"a": 1})  # el subject se trunca a 100
+
+
+def test_secret_store_create_rotate_delete(aws: None) -> None:
+    client = boto3.client("secretsmanager")
+    store = SecretsManagerProvider(client, ttl_seconds=0)
+    arn = store.put_secret("acme", "openai-1", {"admin_api_key": "v1"})
+    assert store.get_secret(arn) == {"admin_api_key": "v1"}
+    arn2 = store.put_secret("acme", "openai-1", {"admin_api_key": "v2"})  # ya existe → rota
+    assert store.get_secret(arn2)["admin_api_key"] == "v2"
+    store.delete_secret(arn2)
+    described = client.describe_secret(SecretId=arn2)
+    assert "DeletedDate" in described  # recuperable durante la ventana de 7 días

@@ -24,7 +24,7 @@ paths:
   /v1/summary:
     get:
       summary: KPIs del dashboard para un rango de fechas
-      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }]
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }, { $ref: "#/components/parameters/dataset" }]
       responses:
         "200":
           description: Resumen
@@ -77,6 +77,12 @@ paths:
         "429": { description: Límite de tasa de API Gateway }
   /v1/mappings:
     get: { summary: Lista mapeos principal → persona/equipo, responses: { "200": { description: OK } } }
+    delete:
+      summary: Elimina un mapeo (admins)
+      parameters:
+        - { name: provider, in: query, required: true, schema: { $ref: "#/components/schemas/Provider" } }
+        - { name: principal, in: query, required: true, schema: { type: string } }
+      responses: { "200": { description: OK } }
     put:
       summary: Crea o actualiza un mapeo (grupo admins)
       requestBody:
@@ -84,15 +90,52 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/PrincipalMapping" }
       responses: { "200": { description: OK }, "403": { description: Requiere grupo admins } }
+  /v1/me:
+    get:
+      summary: Tenant del token, permisos y tenant de ejemplo
+      responses: { "200": { description: OK } }
+  /v1/identities:
+    get:
+      summary: Identidades técnicas vistas en el rango, su gasto y si tienen persona/equipo asignados
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }, { $ref: "#/components/parameters/dataset" }]
+      responses: { "200": { description: OK } }
+  /v1/providers:
+    get:
+      summary: Catálogo de proveedores con los campos (credenciales y opciones) que pide cada uno
+      responses: { "200": { description: OK } }
   /v1/connectors:
-    get: { summary: Lista conectores del tenant (admins), responses: { "200": { description: OK } } }
+    get:
+      summary: Conexiones del tenant con su último estado de sincronización (admins). Nunca incluye secretos.
+      responses: { "200": { description: OK } }
     put:
-      summary: Registra un conector (admins). Las credenciales se guardan en Secrets Manager.
+      summary: Crea o edita una conexión (admins). Los campos secretos van a Secrets Manager; vacíos = conservar.
       requestBody:
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/Connector" }
-      responses: { "200": { description: OK } }
+            schema: { $ref: "#/components/schemas/ConnectionRequest" }
+      responses: { "200": { description: Conexión guardada }, "400": { description: Campos faltantes o desconocidos } }
+  /v1/connectors/test:
+    post:
+      summary: Prueba credenciales leyendo los últimos 3 días, sin guardar nada (admins)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConnectionRequest" }
+      responses:
+        "200":
+          description: Resultado de la prueba (ok, registros, costo, error depurado)
+  /v1/connectors/{connector_id}/sync:
+    post:
+      summary: Encola una sincronización inmediata (admins)
+      parameters:
+        - { name: connector_id, in: path, required: true, schema: { type: string } }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 31 } }
+      responses: { "202": { description: En cola }, "404": { description: No existe } }
+  /v1/connectors/{connector_id}:
+    delete:
+      summary: Elimina la conexión y su secreto (recuperable 7 días en Secrets Manager) (admins)
+      parameters: [{ name: connector_id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Eliminada }, "404": { description: No existe } }
   /v1/budgets:
     get: { summary: Presupuestos y gasto del mes en curso, responses: { "200": { description: OK } } }
     put:
@@ -123,6 +166,7 @@ components:
   parameters:
     from: { name: from, in: query, schema: { type: string, format: date }, description: "Inclusivo. Por defecto: to - 30 días" }
     to: { name: to, in: query, schema: { type: string, format: date }, description: "Exclusivo. Por defecto: mañana (UTC)" }
+    dataset: { name: dataset, in: query, schema: { type: string, enum: [demo] }, description: "demo = leer el tenant de ejemplo (solo lectura)" }
   responses:
     BadRequest: { description: Validación fallida (detalle de Pydantic en el cuerpo) }
   schemas:
@@ -150,16 +194,17 @@ components:
         principal: { type: string }
         member: { type: string }
         team: { type: string }
-    Connector:
+    ConnectionRequest:
       type: object
-      required: [connector_id, provider]
+      additionalProperties: false
+      required: [provider]
       properties:
-        connector_id: { type: string }
+        connector_id: { type: string, description: "Vacío = nueva conexión" }
         provider: { $ref: "#/components/schemas/Provider" }
-        secret_arn: { type: string }
+        label: { type: string, maxLength: 120 }
+        values: { type: object, additionalProperties: { type: string }, description: "Campos definidos en /v1/providers" }
         enabled: { type: boolean, default: true }
         lookback_days: { type: integer, minimum: 1, maximum: 31, default: 3 }
-        options: { type: object, additionalProperties: { type: string } }
     Metrics:
       type: object
       properties:

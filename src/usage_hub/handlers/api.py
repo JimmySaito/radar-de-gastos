@@ -2,13 +2,23 @@
 
 Rutas
 -----
-GET  /v1/health                       sin auth (health check)
-GET  /v1/summary?from&to              KPIs del dashboard
-GET  /v1/timeseries?from&to&group_by  serie diaria (provider|member|team|service)
-POST /v1/usage/records                ingesta push (scope usagehub/ingest) → 202
-GET  /v1/mappings | PUT /v1/mappings  gobierno: principal → persona/equipo (admins)
-GET  /v1/connectors | PUT /v1/connectors  configuración de conectores (admins)
-GET  /v1/budgets | PUT /v1/budgets    presupuestos y su estado (admins para escribir)
+GET    /v1/health                          sin auth (health check)
+GET    /v1/me                              tenant, permisos y tenant de ejemplo
+GET    /v1/summary?from&to[&dataset=demo]  KPIs del dashboard
+GET    /v1/timeseries?from&to&group_by     serie diaria (provider|member|team|service)
+GET    /v1/identities?from&to              identidades vistas y si están asignadas
+POST   /v1/usage/records                   ingesta push (scope usagehub/ingest) → 202
+GET    /v1/providers                       catálogo de proveedores y campos requeridos
+GET    /v1/connectors                      conexiones + estado (sin secretos)        [admins]
+PUT    /v1/connectors                      crear/editar conexión                     [admins]
+POST   /v1/connectors/test                 probar credenciales sin guardar           [admins]
+POST   /v1/connectors/{id}/sync?days=N     sincronizar ahora → 202                   [admins]
+DELETE /v1/connectors/{id}                 eliminar conexión y su secreto            [admins]
+GET|PUT|DELETE /v1/mappings                principal → persona/equipo   [escritura: admins]
+GET|PUT|DELETE /v1/budgets                 presupuestos mensuales       [escritura: admins]
+
+``dataset=demo`` hace que las lecturas usen el tenant de ejemplo (sólo lectura). Las
+escrituras siempre van al tenant del token.
 """
 
 from __future__ import annotations
@@ -29,17 +39,16 @@ from aws_lambda_powertools.metrics import MetricUnit
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from usage_hub.connectors.catalog import CATALOG, InvalidConfigurationError
 from usage_hub.domain.ledger import Dimension
-from usage_hub.domain.models import (
-    Budget,
-    ConnectorConfig,
-    Identifier,
-    PrincipalMapping,
-    Provider,
-    UsageRecord,
-)
+from usage_hub.domain.models import Budget, Identifier, PrincipalMapping, Provider, UsageRecord
 from usage_hub.handlers.bootstrap import container, today_utc
 from usage_hub.services.budgets import BudgetEvaluator
+from usage_hub.services.connections import (
+    ConnectionNotFoundError,
+    ConnectionRequest,
+    ConnectionService,
+)
 from usage_hub.services.dashboard import DashboardService, DateRange, InvalidRangeError
 from usage_hub.services.ingestion import chunk_records
 
@@ -69,7 +78,7 @@ def current_caller() -> Caller:
     """
     settings = container().settings
     if settings.auth_mode == "local":
-        local_tenant = str(app.current_event.headers.get("x-tenant-id", "demo"))
+        local_tenant = str(app.current_event.headers.get("x-tenant-id", "local"))
         return Caller(tenant_id=local_tenant, subject="local", is_admin=True, can_ingest=True)
 
     claims: dict[str, Any] = (
@@ -102,6 +111,14 @@ def require_admin() -> Caller:
     return caller
 
 
+def read_tenant() -> str:
+    """Tenant para lecturas: el del token o, con ``dataset=demo``, el de ejemplo."""
+    caller = current_caller()
+    if app.current_event.get_query_string_value("dataset") == "demo":
+        return container().settings.demo_tenant
+    return caller.tenant_id
+
+
 def _body(model: type[BaseModel]) -> Any:
     try:
         return model.model_validate(app.current_event.json_body or {})
@@ -120,23 +137,66 @@ def _range() -> DateRange:
         raise BadRequestError(str(exc)) from exc
 
 
+def _query(name: str) -> str:
+    value = app.current_event.get_query_string_value(name)
+    if not value:
+        raise BadRequestError(f"falta el parámetro '{name}'")
+    return value
+
+
+def _provider(value: str | None) -> Provider | None:
+    if not value or value == "*":
+        return None
+    try:
+        return Provider(value)
+    except ValueError as exc:
+        raise BadRequestError(f"proveedor desconocido: {value}") from exc
+
+
+def _connections() -> ConnectionService:
+    c = container()
+    return ConnectionService(c.configs, c.secrets, c.queue, today_utc)
+
+
+@app.exception_handler(InvalidConfigurationError)  # type: ignore[untyped-decorator]
+def _invalid_config(exc: InvalidConfigurationError) -> Response[Any]:
+    return Response(400, "application/json", {"statusCode": 400, "message": str(exc)})
+
+
+@app.exception_handler(ConnectionNotFoundError)  # type: ignore[untyped-decorator]
+def _not_found(exc: ConnectionNotFoundError) -> Response[Any]:
+    return Response(404, "application/json", {"statusCode": 404, "message": str(exc)})
+
+
 # ---------------------------------------------------------------- lectura
 @app.get("/v1/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/v1/me")
+def me() -> dict[str, Any]:
+    caller = current_caller()
+    settings = container().settings
+    return {
+        "tenant_id": caller.tenant_id,
+        "is_admin": caller.is_admin,
+        "demo_tenant": settings.demo_tenant,
+        "auth_mode": settings.auth_mode,
+        "connections": len(container().configs.list_connectors(caller.tenant_id)),
+    }
+
+
 @app.get("/v1/summary")
 @tracer.capture_method
 def summary() -> dict[str, Any]:
-    caller = current_caller()
-    return DashboardService(container().usage).summary(caller.tenant_id, _range())
+    return DashboardService(container().usage).summary(read_tenant(), _range())
 
 
 @app.get("/v1/timeseries")
 @tracer.capture_method
 def timeseries() -> dict[str, Any]:
-    caller = current_caller()
+    tenant = read_tenant()
     group_by = app.current_event.get_query_string_value("group_by", "provider")
     if group_by == "provider":
         dimension = None
@@ -145,7 +205,15 @@ def timeseries() -> dict[str, Any]:
             dimension = Dimension(group_by)
         except ValueError as exc:
             raise BadRequestError("group_by debe ser provider|member|team|service") from exc
-    return DashboardService(container().usage).timeseries(caller.tenant_id, _range(), dimension)
+    return DashboardService(container().usage).timeseries(tenant, _range(), dimension)
+
+
+@app.get("/v1/identities")
+def identities() -> dict[str, Any]:
+    tenant = read_tenant()
+    c = container()
+    rows = DashboardService(c.usage).identities(tenant, _range(), c.mappings.list_mappings(tenant))
+    return {"items": rows}
 
 
 # ---------------------------------------------------------------- ingesta push
@@ -192,14 +260,67 @@ def ingest_records() -> Response[Any]:
     )
 
 
+# ---------------------------------------------------------------- conexiones
+@app.get("/v1/providers")
+def providers() -> dict[str, Any]:
+    current_caller()
+    return {"items": [spec.as_dict() for spec in CATALOG.values()]}
+
+
+@app.get("/v1/connectors")
+def list_connectors() -> dict[str, Any]:
+    caller = require_admin()
+    return {"items": _connections().list(caller.tenant_id)}
+
+
+@app.put("/v1/connectors")
+def put_connector() -> dict[str, Any]:
+    caller = require_admin()
+    request: ConnectionRequest = _body(ConnectionRequest)
+    config = _connections().save(caller.tenant_id, request)
+    logger.info("conexión guardada", extra={"by": caller.subject, "connector": config.connector_id})
+    return next(
+        i for i in _connections().list(caller.tenant_id) if i["connector_id"] == config.connector_id
+    )
+
+
+@app.post("/v1/connectors/test")
+def test_connector() -> dict[str, Any]:
+    caller = require_admin()
+    request: ConnectionRequest = _body(ConnectionRequest)
+    return _connections().test(caller.tenant_id, request).as_dict()
+
+
+@app.post("/v1/connectors/<connector_id>/sync")
+def sync_connector(connector_id: str) -> Response[Any]:
+    caller = require_admin()
+    days_raw = app.current_event.get_query_string_value("days")
+    try:
+        days = int(days_raw) if days_raw else None
+    except ValueError as exc:
+        raise BadRequestError("days debe ser un entero") from exc
+    task = _connections().sync(caller.tenant_id, connector_id, days)
+    return Response(
+        202,
+        "application/json",
+        {"queued": True, "from": task.start.isoformat(), "to": task.end.isoformat()},
+    )
+
+
+@app.delete("/v1/connectors/<connector_id>")
+def delete_connector(connector_id: str) -> dict[str, Any]:
+    caller = require_admin()
+    _connections().delete(caller.tenant_id, connector_id)
+    logger.info("conexión eliminada", extra={"by": caller.subject, "connector": connector_id})
+    return {"deleted": connector_id}
+
+
 # ---------------------------------------------------------------- gobierno
 @app.get("/v1/mappings")
 def list_mappings() -> dict[str, Any]:
-    caller = current_caller()
+    tenant = read_tenant()
     return {
-        "items": [
-            m.model_dump(mode="json") for m in container().mappings.list_mappings(caller.tenant_id)
-        ]
+        "items": [m.model_dump(mode="json") for m in container().mappings.list_mappings(tenant)]
     }
 
 
@@ -212,34 +333,15 @@ def put_mapping() -> dict[str, Any]:
     return mapping.model_dump(mode="json")
 
 
-class ConnectorRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    connector_id: Identifier
-    provider: Provider
-    secret_arn: str | None = None
-    enabled: bool = True
-    lookback_days: int = Field(default=3, ge=1, le=31)
-    options: dict[str, str] = Field(default_factory=dict)
-
-
-@app.get("/v1/connectors")
-def list_connectors() -> dict[str, Any]:
+@app.delete("/v1/mappings")
+def delete_mapping() -> dict[str, Any]:
     caller = require_admin()
-    return {
-        "items": [
-            c.model_dump(mode="json") for c in container().configs.list_connectors(caller.tenant_id)
-        ]
-    }
-
-
-@app.put("/v1/connectors")
-def put_connector() -> dict[str, Any]:
-    caller = require_admin()
-    body: ConnectorRequest = _body(ConnectorRequest)
-    config = ConnectorConfig(tenant_id=caller.tenant_id, **body.model_dump())
-    container().configs.put_connector(config)
-    return config.model_dump(mode="json")
+    provider = _provider(_query("provider"))
+    if provider is None:
+        raise BadRequestError("provider es obligatorio")
+    principal = _query("principal")
+    container().mappings.delete_mapping(caller.tenant_id, provider, principal)
+    return {"deleted": principal}
 
 
 class BudgetRequest(BaseModel):
@@ -252,10 +354,10 @@ class BudgetRequest(BaseModel):
 
 @app.get("/v1/budgets")
 def list_budgets() -> dict[str, Any]:
-    caller = current_caller()
+    tenant = read_tenant()
     c = container()
     statuses = BudgetEvaluator(c.usage, c.configs, c.alert_ledger, c.alerts).status(
-        caller.tenant_id, today_utc()
+        tenant, today_utc()
     )
     return {
         "items": [
@@ -276,6 +378,16 @@ def put_budget() -> dict[str, Any]:
     budget = Budget(tenant_id=caller.tenant_id, **body.model_dump())
     container().configs.put_budget(budget)
     return budget.model_dump(mode="json")
+
+
+@app.delete("/v1/budgets")
+def delete_budget() -> dict[str, Any]:
+    caller = require_admin()
+    team = _query("team")
+    container().configs.delete_budget(
+        caller.tenant_id, team, _provider(app.current_event.get_query_string_value("provider"))
+    )
+    return {"deleted": team}
 
 
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_HTTP)

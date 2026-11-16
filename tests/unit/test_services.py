@@ -205,3 +205,39 @@ def test_budget_alerts_fire_once_per_threshold(repos, make_record: RecordFactory
     statuses = {(s.budget.provider, s.spent) for s in evaluator.status("acme", TODAY)}
     assert statuses == {(None, Decimal("8.50")), (Provider.OPENAI, Decimal(0))}
     assert alerts.published[0][1]["threshold"] == "0.5"
+
+
+def test_demo_seed_is_idempotent() -> None:
+    from usage_hub.services.demo import seed_demo
+
+    usage, mappings, configs = (
+        InMemoryUsageRepository(),
+        InMemoryMappingRepository(),
+        InMemoryConfigRepository(),
+    )
+    first = seed_demo(usage, mappings, configs, TODAY, days=3, members=2)
+    second = seed_demo(usage, mappings, configs, TODAY, days=3, members=2)
+    assert first.written > 0 and second.written == 0
+    assert [c.connector_id for c in configs.list_connectors("demo")] == ["demo-synthetic"]
+    providers = {
+        k.provider
+        for k in usage.query_aggregates(
+            "demo", TODAY - timedelta(days=5), TODAY + timedelta(days=1), Dimension.TEAM
+        )
+    }
+    assert providers == {"anthropic", "openai", "google", "aws"}
+
+
+def test_identities_lists_unmapped_first(repos, make_record: RecordFactory) -> None:  # type: ignore[no-untyped-def]
+    usage, mappings, _ = repos
+    UsageIngestor(usage, mappings).ingest(
+        [make_record(), make_record(principal="user:bob", cost=Decimal(9))]
+    )
+    rows = DashboardService(usage).identities(
+        "acme", DateRange(date(2026, 11, 1), date(2026, 12, 1)), mappings.list_mappings("acme")
+    )
+    assert [(r["name"], r["mapped"]) for r in rows] == [
+        ("user:bob", False),
+        ("alice@acme.com", True),
+    ]
+    assert rows[1]["team"] == "data"

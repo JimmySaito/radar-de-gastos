@@ -14,58 +14,110 @@
     <div class="brand">
       <svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       <span>UsageHub</span>
-      <span class="tenant" id="tenant"></span>
     </div>
-    <div class="filters" role="group" aria-label="Rango de fechas">
-      <button type="button" data-days="7">7 días</button>
-      <button type="button" data-days="30" aria-pressed="true">30 días</button>
-      <button type="button" data-days="90">90 días</button>
-      <select id="groupBy" aria-label="Agrupar serie por">
-        <option value="provider">Por proveedor</option>
-        <option value="team">Por equipo</option>
-      </select>
-      <button type="button" id="logout" hidden>Salir</button>
+    <nav class="views" aria-label="Conjunto de datos">
+      <a href="#/real" data-view="real">Datos reales</a>
+      <a href="#/ejemplo" data-view="ejemplo">Ejemplo</a>
+    </nav>
+    <div class="actions">
+      <div class="filters" id="filters" role="group" aria-label="Rango de fechas">
+        <button type="button" data-days="7">7 días</button>
+        <button type="button" data-days="30" aria-pressed="true">30 días</button>
+        <button type="button" data-days="90">90 días</button>
+        <select id="groupBy" aria-label="Agrupar serie por">
+          <option value="provider">Por proveedor</option>
+          <option value="team">Por equipo</option>
+        </select>
+      </div>
+      <a class="btn" href="#/configuracion" id="settingsLink">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        Configuración
+      </a>
+      <button type="button" class="btn ghost" id="logout" hidden>Salir</button>
     </div>
   </header>
 
   <main>
-    <p class="banner" id="banner" hidden></p>
+    <p class="banner error" id="banner" hidden></p>
 
-    <section class="kpis" aria-label="Indicadores">
-      <article class="kpi"><h2>Costo total</h2><p class="value" id="kpiCost">–</p><p class="sub" id="kpiRange"></p></article>
-      <article class="kpi"><h2>Tokens</h2><p class="value" id="kpiTokens">–</p><p class="sub" id="kpiTokensSub"></p></article>
-      <article class="kpi"><h2>Solicitudes</h2><p class="value" id="kpiRequests">–</p><p class="sub">llamadas a modelos/API</p></article>
-      <article class="kpi"><h2>Equipo con más gasto</h2><p class="value" id="kpiTeam">–</p><p class="sub" id="kpiTeamSub"></p></article>
-    </section>
-
-    <section class="card wide">
-      <div class="card-head">
-        <h2 id="seriesTitle">Costo diario por proveedor (USD)</h2>
-        <button type="button" class="link" data-table-for="series">Ver tabla</button>
+    <!-- ============================================================ DASHBOARD -->
+    <section id="dashboard" hidden>
+      <div class="notice" id="demoNotice" hidden>
+        <strong>Datos de ejemplo.</strong> Una organización ficticia para mostrar las capacidades del producto.
+        <a href="#/real">Ver mis datos reales →</a>
       </div>
-      <div class="chart-box tall"><canvas id="seriesChart" role="img" aria-label="Costo diario apilado"></canvas></div>
-      <div class="table-view" id="series-table" hidden></div>
+
+      <div class="empty" id="emptyState" hidden>
+        <h1>Conecta tu primera fuente de consumo</h1>
+        <p>Aún no hay datos reales. Agrega tus credenciales de Claude, OpenAI, AWS o Google, o envía consumo de cualquier sistema por API.</p>
+        <div class="row">
+          <a class="btn primary" href="#/configuracion/conexiones">Configurar conexiones</a>
+          <a class="btn" href="#/ejemplo">Ver el ejemplo</a>
+        </div>
+      </div>
+
+      <div id="dashContent">
+        <section class="kpis" aria-label="Indicadores">
+          <article class="kpi"><h2>Costo total</h2><p class="value" id="kpiCost">–</p><p class="sub" id="kpiRange"></p></article>
+          <article class="kpi"><h2>Tokens</h2><p class="value" id="kpiTokens">–</p><p class="sub" id="kpiTokensSub"></p></article>
+          <article class="kpi"><h2>Solicitudes</h2><p class="value" id="kpiRequests">–</p><p class="sub">llamadas a modelos/API</p></article>
+          <article class="kpi"><h2>Equipo con más gasto</h2><p class="value" id="kpiTeam">–</p><p class="sub" id="kpiTeamSub"></p></article>
+        </section>
+
+        <section class="card wide">
+          <div class="card-head">
+            <h2 id="seriesTitle">Costo diario por proveedor (USD)</h2>
+            <button type="button" class="link" data-table-for="series">Ver tabla</button>
+          </div>
+          <div class="chart-box tall"><canvas id="seriesChart" role="img" aria-label="Costo diario apilado"></canvas></div>
+          <div class="table-view" id="series-table" hidden></div>
+        </section>
+
+        <div class="grid">
+          <section class="card">
+            <div class="card-head"><h2>Proveedores</h2></div>
+            <table class="data" id="providersTable"><thead><tr><th>Proveedor</th><th class="num">Costo</th><th class="num">Tokens</th><th class="num">%</th></tr></thead><tbody></tbody></table>
+          </section>
+          <section class="card">
+            <div class="card-head"><h2>Presupuestos del mes</h2><a class="link admin-only" href="#/configuracion/presupuestos" id="budgetsLink">Administrar</a></div>
+            <table class="data" id="budgetsTable"><thead><tr><th>Equipo</th><th class="num">Gastado</th><th class="num">Límite</th><th>Estado</th></tr></thead><tbody></tbody></table>
+          </section>
+          <section class="card">
+            <div class="card-head"><h2>Personas con más consumo</h2></div>
+            <div class="chart-box"><canvas id="membersChart" role="img" aria-label="Personas con más consumo"></canvas></div>
+          </section>
+          <section class="card">
+            <div class="card-head"><h2>Modelos y servicios</h2></div>
+            <div class="chart-box"><canvas id="servicesChart" role="img" aria-label="Modelos y servicios con más costo"></canvas></div>
+          </section>
+        </div>
+      </div>
     </section>
 
-    <div class="grid">
-      <section class="card">
-        <div class="card-head"><h2>Proveedores</h2></div>
-        <table class="data" id="providersTable"><thead><tr><th>Proveedor</th><th class="num">Costo</th><th class="num">Tokens</th><th class="num">%</th></tr></thead><tbody></tbody></table>
-      </section>
-      <section class="card">
-        <div class="card-head"><h2>Presupuestos del mes</h2></div>
-        <table class="data" id="budgetsTable"><thead><tr><th>Equipo</th><th class="num">Gastado</th><th class="num">Límite</th><th>Estado</th></tr></thead><tbody></tbody></table>
-      </section>
-      <section class="card">
-        <div class="card-head"><h2>Personas con más consumo</h2></div>
-        <div class="chart-box"><canvas id="membersChart" role="img" aria-label="Personas con más consumo"></canvas></div>
-      </section>
-      <section class="card">
-        <div class="card-head"><h2>Modelos y servicios</h2></div>
-        <div class="chart-box"><canvas id="servicesChart" role="img" aria-label="Modelos y servicios con más costo"></canvas></div>
-      </section>
-    </div>
+    <!-- ============================================================ CONFIGURACIÓN -->
+    <section id="settings" hidden>
+      <div class="settings-head">
+        <a class="link" href="#/real">← Volver al dashboard</a>
+        <h1>Configuración</h1>
+        <p class="muted">Conecta tus proveedores, asigna el consumo a personas y equipos y define presupuestos.</p>
+      </div>
+      <div class="settings-layout">
+        <nav class="tabs" aria-label="Secciones de configuración">
+          <a href="#/configuracion/conexiones" data-tab="conexiones">Conexiones</a>
+          <a href="#/configuracion/personas" data-tab="personas">Personas y equipos</a>
+          <a href="#/configuracion/presupuestos" data-tab="presupuestos">Presupuestos</a>
+          <a href="#/configuracion/ingesta" data-tab="ingesta">Ingesta por API</a>
+        </nav>
+        <div class="tab-body">
+          <div data-panel="conexiones"></div>
+          <div data-panel="personas" hidden></div>
+          <div data-panel="presupuestos" hidden></div>
+          <div data-panel="ingesta" hidden></div>
+        </div>
+      </div>
+    </section>
   </main>
-  <footer>Datos de proveedores con 4–24 h de retraso. Los montos se muestran antes de créditos e impuestos.</footer>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <footer>Datos de proveedores con 4–24 h de retraso. Montos antes de créditos e impuestos.</footer>
 </body>
 </html>

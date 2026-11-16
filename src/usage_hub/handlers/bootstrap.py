@@ -2,7 +2,8 @@
 
 Las instancias se crean una vez por contenedor de Lambda (fuera del handler), de modo
 que las conexiones y la caché de secretos se reutilizan entre invocaciones *warm*.
-``STORAGE=memory`` permite ejecutar todo localmente sin AWS (demo y pruebas).
+``STORAGE=memory`` ejecuta todo en memoria (pruebas); ``STORAGE=local`` además persiste
+configuración y credenciales en ``~/.usagehub`` para usar la aplicación sin AWS.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from usage_hub.domain.ports import (
     AlertPublisher,
     ConfigRepository,
     MappingRepository,
-    SecretProvider,
+    SecretStore,
     UsageRepository,
     WorkQueue,
 )
@@ -33,6 +34,7 @@ class Settings:
     alert_topic_arn: str
     auth_mode: str
     m2m_client_tenants: dict[str, str]
+    demo_tenant: str
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -43,6 +45,7 @@ class Settings:
             alert_topic_arn=os.environ.get("ALERT_TOPIC_ARN", ""),
             auth_mode=os.environ.get("AUTH_MODE", "jwt"),
             m2m_client_tenants=json.loads(os.environ.get("M2M_CLIENT_TENANTS", "{}")),
+            demo_tenant=os.environ.get("DEMO_TENANT", "demo"),
         )
 
 
@@ -53,7 +56,7 @@ class Container:
     mappings: MappingRepository
     configs: ConfigRepository
     alert_ledger: AlertLedger
-    secrets: SecretProvider
+    secrets: SecretStore
     queue: WorkQueue
     alerts: AlertPublisher
 
@@ -102,6 +105,12 @@ def _aws_container(settings: Settings) -> Container:
 
 
 def _memory_container(settings: Settings) -> Container:
+    from usage_hub.adapters.localfs import (
+        FileConfigRepository,
+        FileMappingRepository,
+        FileSecretStore,
+        default_home,
+    )
     from usage_hub.adapters.memory import (
         InMemoryAlerts,
         InMemoryConfigRepository,
@@ -111,14 +120,29 @@ def _memory_container(settings: Settings) -> Container:
         StaticSecrets,
     )
 
-    configs = InMemoryConfigRepository()
+    configs: InMemoryConfigRepository
+    mappings: InMemoryMappingRepository
+    secrets: StaticSecrets
+    if settings.storage == "local":
+        home = default_home()
+        configs, mappings, secrets = (
+            FileConfigRepository(home),
+            FileMappingRepository(home),
+            FileSecretStore(home),
+        )
+    else:
+        configs, mappings, secrets = (
+            InMemoryConfigRepository(),
+            InMemoryMappingRepository(),
+            StaticSecrets(),
+        )
     return Container(
         settings=settings,
         usage=InMemoryUsageRepository(),
-        mappings=InMemoryMappingRepository(),
+        mappings=mappings,
         configs=configs,
         alert_ledger=configs,
-        secrets=StaticSecrets(),
+        secrets=secrets,
         queue=InMemoryQueue(),
         alerts=InMemoryAlerts(),
     )
@@ -128,6 +152,6 @@ def _memory_container(settings: Settings) -> Container:
 def container() -> Container:
     """Única instancia por contenedor de ejecución (singleton perezoso)."""
     settings = Settings.from_env()
-    if settings.storage == "memory":
+    if settings.storage in {"memory", "local"}:
         return _memory_container(settings)
     return _aws_container(settings)

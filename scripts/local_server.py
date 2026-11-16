@@ -1,9 +1,14 @@
-"""Servidor local de demostración (sin AWS).
+"""Servidor local de UsageHub (sin AWS).
 
 Ejecuta el mismo handler de Lambda de la API traduciendo peticiones HTTP a eventos de
-API Gateway HTTP API v2, con almacenamiento en memoria y datos sintéticos.
+API Gateway HTTP API v2. Ofrece dos conjuntos de datos:
 
-    python scripts/local_server.py --port 8080 --days 60 --members 12
+- **Ejemplo** (tenant ``demo``): organización ficticia generada al arrancar.
+- **Datos reales** (tenant ``local``): las conexiones que configures en la pantalla de
+  Configuración. La configuración y las credenciales se guardan en ``~/.usagehub``
+  (o ``$USAGEHUB_HOME``) y, al arrancar, se resincronizan los últimos días.
+
+    python scripts/local_server.py --port 8080
     # abrir http://localhost:8080
 """
 
@@ -14,7 +19,7 @@ import json
 import mimetypes
 import os
 import sys
-from datetime import timedelta
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -22,29 +27,26 @@ from urllib.parse import parse_qsl, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-os.environ.setdefault("STORAGE", "memory")
+os.environ.setdefault("STORAGE", "local")
 os.environ.setdefault("AUTH_MODE", "local")
 os.environ.setdefault("POWERTOOLS_METRICS_NAMESPACE", "UsageHub")
 os.environ.setdefault("POWERTOOLS_TRACE_DISABLED", "true")
 os.environ.setdefault("POWERTOOLS_METRICS_DISABLED", "true")
+os.environ.setdefault("POWERTOOLS_LOG_LEVEL", "WARNING")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 
+from usage_hub.adapters.localfs import default_home  # noqa: E402
 from usage_hub.adapters.memory import InMemoryQueue  # noqa: E402
-from usage_hub.connectors.synthetic import SyntheticConnector  # noqa: E402
-from usage_hub.domain.models import Budget, ConnectorConfig, PrincipalMapping, Provider, UsageRecord  # noqa: E402
-from usage_hub.domain.ports import CollectionWindow  # noqa: E402
 from usage_hub.handlers import api  # noqa: E402
 from usage_hub.handlers.bootstrap import container, today_utc  # noqa: E402
+from usage_hub.services.connections import ConnectionService  # noqa: E402
+from usage_hub.services.demo import seed_demo  # noqa: E402
 from usage_hub.services.ingestion import UsageCollector, UsageIngestor, parse_task  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
-TENANT = "demo"
-TEAMS = ["plataforma", "datos", "producto", "seguridad"]
-PROVIDER_FOR_MODEL = {
-    "claude": Provider.ANTHROPIC,
-    "gpt": Provider.OPENAI,
-    "gemini": Provider.GOOGLE,
-}
+REAL_TENANT = "local"
+STARTUP_SYNC_DAYS = 30
+_drain_lock = threading.Lock()
 
 
 class _Ctx:
@@ -54,68 +56,39 @@ class _Ctx:
     aws_request_id = "local"
 
 
-def seed(days: int, members: int) -> None:
-    c = container()
-    end = today_utc() + timedelta(days=1)
-    synthetic = SyntheticConnector(members=members, seed=7)
-    records: list[UsageRecord] = []
-    for r in synthetic.fetch(TENANT, CollectionWindow(end - timedelta(days=days), end)):
-        provider = next(
-            (p for k, p in PROVIDER_FOR_MODEL.items() if r.service.startswith(k)), Provider.CUSTOM
-        )
-        records.append(r.model_copy(update={"provider": provider}))
-    # Consumo de nube (AWS) atribuido por tag.
-    for r in synthetic.fetch(TENANT, CollectionWindow(end - timedelta(days=days), end)):
-        if r.service == "claude-haiku-5-5":
-            records.append(
-                r.model_copy(
-                    update={
-                        "provider": Provider.AWS,
-                        "service": "Amazon Bedrock" if int(r.principal[-1]) % 2 else "AWS Lambda",
-                        "input_tokens": 0,
-                        "output_tokens": 0,
-                        "cached_tokens": 0,
-                        "cost": r.cost * 40,
-                    }
-                )
-            )
-    for i in range(members):
-        for provider in (Provider.ANTHROPIC, Provider.OPENAI, Provider.GOOGLE, Provider.AWS):
-            c.mappings.put_mapping(
-                TENANT,
-                PrincipalMapping(
-                    provider=provider,
-                    principal=f"user:dev-{i:03d}",
-                    member=f"persona{i:02d}@empresa.com",
-                    team=TEAMS[i % len(TEAMS)],
-                ),
-            )
-    stats = UsageIngestor(c.usage, c.mappings).ingest(records)
-    for team, limit in zip(TEAMS, ("1100", "3000", "1500", "900"), strict=True):
-        c.configs.put_budget(Budget(tenant_id=TENANT, team=team, monthly_limit=limit))
-    c.configs.put_connector(
-        ConnectorConfig(
-            tenant_id=TENANT,
-            connector_id="demo-synthetic",
-            provider=Provider.SYNTHETIC,
-            options={"members": str(members)},
-        )
-    )
-    print(f"datos sembrados: {stats.as_dict()}")
-
-
 def drain_queue() -> None:
-    """Simula a SQS + Lambda colectora: procesa los mensajes encolados por la API."""
+    """Simula a SQS + Lambda colectora: procesa los mensajes encolados por la API.
+
+    Los fallos de un conector quedan registrados en su estado (visible en Configuración)
+    y no interrumpen la respuesta HTTP."""
     c = container()
     queue = c.queue
     assert isinstance(queue, InMemoryQueue)
     collector = UsageCollector(c.configs, c.secrets, UsageIngestor(c.usage, c.mappings))
-    while True:
-        try:
-            message = queue.messages.pop(0)  # list.pop es atómico en CPython (servidor multihilo)
-        except IndexError:
-            return
-        collector.handle(parse_task(message))
+    with _drain_lock:
+        while queue.messages:
+            message = queue.messages.pop(0)
+            try:
+                collector.handle(parse_task(message))
+            except Exception as exc:
+                print(f"sincronización fallida: {type(exc).__name__}", file=sys.stderr)
+
+
+def startup_sync() -> None:
+    """Reconstruye los datos reales en memoria a partir de las conexiones guardadas."""
+    c = container()
+    service = ConnectionService(c.configs, c.secrets, c.queue, today_utc)
+    connectors = [x for x in c.configs.list_connectors() if x.tenant_id != c.settings.demo_tenant]
+    for config in connectors:
+        if config.enabled:
+            service.sync(config.tenant_id, config.connector_id, STARTUP_SYNC_DAYS)
+    if connectors:
+        print(
+            f"sincronizando {len(connectors)} conexión(es) guardada(s) en segundo plano...",
+            flush=True,
+        )
+        drain_queue()
+        print("sincronización inicial terminada", flush=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -169,7 +142,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/v1/"):
             self._api("GET")
         elif self.path.startswith("/config.json"):
-            payload = json.dumps({"apiBaseUrl": "", "authMode": "local"}).encode()
+            payload = json.dumps(
+                {"apiBaseUrl": "", "authMode": "local", "tenant": REAL_TENANT}
+            ).encode()
             self.send_response(200)
             self.send_header("content-type", "application/json")
             self.send_header("content-length", str(len(payload)))
@@ -183,6 +158,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:
         self._api("PUT")
+
+    def do_DELETE(self) -> None:
+        self._api("DELETE")
 
     def do_OPTIONS(self) -> None:
         self._api("OPTIONS")
@@ -204,7 +182,13 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true", help="registra cada petición en consola")
     args = parser.parse_args()
     Handler.verbose = args.verbose
-    seed(args.days, args.members)
+    c = container()
+    stats = seed_demo(
+        c.usage, c.mappings, c.configs, today_utc(), days=args.days, members=args.members
+    )
+    print(f"datos de ejemplo listos ({stats.written} registros)", flush=True)
+    print(f"configuración y credenciales en: {default_home()}", flush=True)
+    threading.Thread(target=startup_sync, daemon=True).start()
     print(f"UsageHub local en http://localhost:{args.port}  (Ctrl+C para detener)", flush=True)
     ThreadingHTTPServer.request_queue_size = (
         512  # backlog por defecto (5) rechaza conexiones bajo carga

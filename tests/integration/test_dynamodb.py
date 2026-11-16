@@ -192,3 +192,34 @@ def test_mapping_and_config_repositories(dynamodb_table: tuple[Any, str]) -> Non
     assert configs.list_budgets("acme")[0].monthly_limit == Decimal("100.50")
     assert configs.mark_alert_sent("acme|2026-11#data#*#0.5") is True
     assert configs.mark_alert_sent("acme|2026-11#data#*#0.5") is False
+
+
+def test_settings_operations_on_dynamodb(dynamodb_table: tuple[Any, str]) -> None:
+    from usage_hub.domain.models import ConnectorStatus
+
+    configs = DynamoConfigRepository(*dynamodb_table)
+    mappings = DynamoMappingRepository(*dynamodb_table)
+    status = ConnectorStatus(last_sync_at="2026-11-16T10:00:00Z", ok=False, error="401")  # type: ignore[arg-type]
+
+    configs.record_sync("acme", "ghost", status)  # no crea conectores fantasma
+    assert configs.list_connectors("acme") == []
+
+    configs.put_connector(
+        ConnectorConfig(tenant_id="acme", connector_id="c1", provider=Provider.OPENAI)
+    )
+    configs.record_sync("acme", "c1", status)
+    assert configs.list_statuses("acme")["c1"].error == "401"
+    configs.delete_connector("acme", "c1")
+    assert configs.list_connectors("acme") == []
+
+    configs.put_budget(
+        Budget(tenant_id="acme", team="t", provider=Provider.AWS, monthly_limit=Decimal(5))
+    )
+    configs.delete_budget("acme", "t", Provider.AWS)
+    assert configs.list_budgets("acme") == []
+
+    mappings.put_mapping(
+        "acme", PrincipalMapping(provider=Provider.AWS, principal="tag:x", member="x", team="t")
+    )
+    mappings.delete_mapping("acme", Provider.AWS, "tag:x")
+    assert mappings.list_mappings("acme") == []

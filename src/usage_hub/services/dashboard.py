@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
 from usage_hub.domain.ledger import Dimension
-from usage_hub.domain.models import Metrics
+from usage_hub.domain.models import Metrics, PrincipalMapping
 from usage_hub.domain.ports import UsageRepository
 
 MAX_RANGE_DAYS = 366
@@ -123,3 +124,30 @@ class DashboardService:
                 for name, points in sorted(series.items())
             ],
         }
+
+    def identities(
+        self, tenant_id: str, rng: DateRange, mappings: Sequence[PrincipalMapping]
+    ) -> list[dict[str, Any]]:
+        """Identidades vistas en el rango con su gasto y si ya tienen persona/equipo.
+
+        Alimenta la pantalla de gobierno: lo no asignado aparece primero para que el
+        administrador lo mapee (KPI de cobertura de atribución)."""
+        mapped = {(m.provider.value, m.member): m for m in mappings}
+        totals: defaultdict[tuple[str, str], Metrics] = defaultdict(Metrics)
+        for key, m in self._repo.query_aggregates(
+            tenant_id, rng.start, rng.end, Dimension.MEMBER
+        ).items():
+            totals[(key.provider, key.value)] += m
+        rows = []
+        for (provider, name), m in totals.items():
+            mapping = mapped.get((provider, name))
+            rows.append(
+                {
+                    "provider": provider,
+                    "name": name,
+                    "mapped": mapping is not None,
+                    "team": mapping.team if mapping else None,
+                    **_metrics_json(m),
+                }
+            )
+        return sorted(rows, key=lambda r: (r["mapped"], -Decimal(r["cost"])))

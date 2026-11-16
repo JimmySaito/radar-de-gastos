@@ -185,30 +185,109 @@ def test_authorization_rules(memory_env: bootstrap.Container) -> None:
     assert call(http_event("GET", "/v1/summary", claims={"sub": "no-tenant"}))[0] == 403
 
 
-def test_admin_configuration_endpoints(memory_env: bootstrap.Container) -> None:
-    connector = {"connector_id": "anthropic-main", "provider": "anthropic", "secret_arn": "arn:x"}
-    assert call(http_event("PUT", "/v1/connectors", claims=USER, body=connector))[0] == 200
-    assert (
-        call(http_event("GET", "/v1/connectors", claims=USER))[1]["items"][0]["tenant_id"] == "acme"
+def test_connection_lifecycle_via_api(memory_env: bootstrap.Container) -> None:
+    """Flujo de la pantalla de Configuración: catálogo → probar → guardar → sync → borrar."""
+    status, catalog = call(http_event("GET", "/v1/providers", claims=VIEWER))
+    assert status == 200
+    assert {p["provider"] for p in catalog["items"]} >= {"anthropic", "openai", "aws", "google"}
+
+    body = {"provider": "synthetic", "label": "Prueba", "values": {"members": "2"}}
+    status, result = call(http_event("POST", "/v1/connectors/test", claims=USER, body=body))
+    assert status == 200 and result["ok"] and result["records"] > 0
+
+    assert call(http_event("PUT", "/v1/connectors", claims=VIEWER, body=body))[0] == 403
+    status, saved = call(http_event("PUT", "/v1/connectors", claims=USER, body=body))
+    assert status == 200 and saved["label"] == "Prueba" and saved["status"] is None
+    cid = saved["connector_id"]
+
+    status, queued = call(
+        http_event("POST", f"/v1/connectors/{cid}/sync", claims=USER, query={"days": "5"})
     )
+    assert status == 202 and queued["queued"]
+    drain(memory_env)
+    items = call(http_event("GET", "/v1/connectors", claims=USER))[1]["items"]
+    assert items[0]["status"]["ok"] is True and items[0]["status"]["written"] > 0
+    assert call(http_event("GET", "/v1/me", claims=USER))[1]["connections"] == 1
+
+    assert call(http_event("POST", "/v1/connectors/nope/sync", claims=USER))[0] == 404
     assert (
-        call(
-            http_event(
-                "PUT", "/v1/budgets", claims=USER, body={"team": "data", "monthly_limit": "100"}
-            )
-        )[0]
-        == 200
+        call(http_event("POST", f"/v1/connectors/{cid}/sync", claims=USER, query={"days": "x"}))[0]
+        == 400
     )
+    assert call(http_event("DELETE", f"/v1/connectors/{cid}", claims=USER))[0] == 200
+    assert call(http_event("GET", "/v1/connectors", claims=USER))[1]["items"] == []
+
+
+def test_connection_validation_errors(memory_env: bootstrap.Container) -> None:
+    missing_key = {"provider": "anthropic", "values": {}}
+    status, payload = call(http_event("PUT", "/v1/connectors", claims=USER, body=missing_key))
+    assert status == 400 and "Admin API key" in payload["message"]
+    unknown = {"provider": "openai", "values": {"admin_api_key": "k", "hack": "1"}}
+    assert call(http_event("PUT", "/v1/connectors", claims=USER, body=unknown))[0] == 400
+    status, result = call(http_event("POST", "/v1/connectors/test", claims=USER, body=missing_key))
+    assert status == 200 and result["ok"] is False
+
+
+def test_budgets_and_mappings_admin(memory_env: bootstrap.Container) -> None:
+    budget = {"team": "data", "monthly_limit": "100"}
+    assert call(http_event("PUT", "/v1/budgets", claims=USER, body=budget))[0] == 200
     items = call(http_event("GET", "/v1/budgets", claims=VIEWER))[1]["items"]
     assert items[0]["spent"] == "0.00"
+    bad = {"team": "data", "monthly_limit": "-1"}
+    assert call(http_event("PUT", "/v1/budgets", claims=USER, body=bad))[0] == 400
+    assert call(http_event("DELETE", "/v1/budgets", claims=USER, query={"team": "data"}))[0] == 200
+    assert call(http_event("GET", "/v1/budgets", claims=VIEWER))[1]["items"] == []
+    assert call(http_event("DELETE", "/v1/budgets", claims=USER))[0] == 400
+
+    mapping = {"provider": "openai", "principal": "user:x", "member": "x@acme.com", "team": "t"}
+    call(http_event("PUT", "/v1/mappings", claims=USER, body=mapping))
+    query = {"provider": "openai", "principal": "user:x"}
+    assert call(http_event("DELETE", "/v1/mappings", claims=USER, query=query))[0] == 200
+    assert call(http_event("GET", "/v1/mappings", claims=USER))[1]["items"] == []
     assert (
         call(
             http_event(
-                "PUT", "/v1/budgets", claims=USER, body={"team": "data", "monthly_limit": "-1"}
+                "DELETE", "/v1/mappings", claims=USER, query={"provider": "nope", "principal": "p"}
             )
         )[0]
         == 400
     )
+
+
+def test_demo_dataset_is_readable_but_writes_go_to_own_tenant(
+    memory_env: bootstrap.Container,
+) -> None:
+    from usage_hub.services.demo import seed_demo
+
+    seed_demo(
+        memory_env.usage,
+        memory_env.mappings,
+        memory_env.configs,
+        bootstrap.today_utc(),
+        days=5,
+        members=3,
+    )
+    own = call(http_event("GET", "/v1/summary", claims=VIEWER))[1]
+    demo = call(http_event("GET", "/v1/summary", claims=VIEWER, query={"dataset": "demo"}))[1]
+    assert own["total"]["cost"] == "0.00"
+    assert demo["tenant_id"] == "demo" and demo["total"]["cost"] != "0.00"
+    assert set(demo["by_provider"]) == {"anthropic", "openai", "google", "aws"}
+    ids = call(http_event("GET", "/v1/identities", claims=VIEWER, query={"dataset": "demo"}))[1]
+    assert ids["items"] and all(i["mapped"] for i in ids["items"])
+    budgets = call(http_event("GET", "/v1/budgets", claims=VIEWER, query={"dataset": "demo"}))[1]
+    assert len(budgets["items"]) == 4
+    # Una escritura con dataset=demo sigue yendo al tenant del token.
+    call(
+        http_event(
+            "PUT",
+            "/v1/budgets",
+            claims=USER,
+            query={"dataset": "demo"},
+            body={"team": "x", "monthly_limit": "5"},
+        )
+    )
+    assert len(memory_env.configs.list_budgets("acme")) == 1
+    assert len(memory_env.configs.list_budgets("demo")) == 4
 
 
 @pytest.mark.parametrize("query", [{"from": "2026-13-01"}, {"group_by": "planet"}])

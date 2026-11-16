@@ -79,17 +79,34 @@ module "api_fn" {
   package_path    = var.lambda_package
   layers          = [aws_lambda_layer_version.deps.arn]
   memory_mb       = 1024 # más memoria = más CPU = menor latencia p99 en agregaciones
-  timeout_seconds = 10
+  timeout_seconds = 29   # "Probar conexión" llama al proveedor; límite de integración de HTTP API: 30 s
   alarm_actions   = [aws_sns_topic.alerts.arn]
   environment = merge(local.common_env, {
     AUTH_MODE          = "jwt"
+    DEMO_TENANT        = "demo"
     M2M_CLIENT_TENANTS = jsonencode({ (aws_cognito_user_pool_client.ingest.id) = var.m2m_tenant })
   })
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      { Effect = "Allow", Action = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:PutItem"], Resource = local.table_arn },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
+        Resource = local.table_arn
+      },
       { Effect = "Allow", Action = ["sqs:SendMessage"], Resource = module.work_queue.queue_arn },
+      {
+        # Pantalla de Configuración: guarda/rota/borra credenciales de conectores.
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue",
+          "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
+        ]
+        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:usagehub/*"
+      },
+      # "Probar conexión" del conector AWS.
+      { Effect = "Allow", Action = ["ce:GetCostAndUsage"], Resource = "*" },
+      { Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:aws:iam::*:role/usagehub-cost-reader" },
     ]
   })
 }
@@ -110,7 +127,7 @@ module "collector_fn" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:ConditionCheckItem"]
+        Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:ConditionCheckItem"] # UpdateItem: estado de sincronización
         Resource = local.table_arn
       },
       { Effect = "Allow", Action = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], Resource = module.work_queue.queue_arn },

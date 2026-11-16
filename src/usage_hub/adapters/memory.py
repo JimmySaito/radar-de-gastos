@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import date
@@ -12,6 +13,7 @@ from usage_hub.domain.models import (
     Attribution,
     Budget,
     ConnectorConfig,
+    ConnectorStatus,
     Metrics,
     PrincipalMapping,
     Provider,
@@ -43,9 +45,11 @@ class InMemoryUsageRepository:
         self, tenant_id: str, start: date, end: date, dimension: Dimension
     ) -> Mapping[AggregateKey, Metrics]:
         lo, hi = start.isoformat(), end.isoformat()
+        with self._lock:
+            items = list(self.aggregates.items())
         return {
             key: metrics
-            for (tenant, key), metrics in self.aggregates.items()
+            for (tenant, key), metrics in items
             if tenant == tenant_id
             and key.dimension == dimension
             and lo <= key.usage_date < hi
@@ -55,6 +59,7 @@ class InMemoryUsageRepository:
 
 class InMemoryMappingRepository:
     def __init__(self) -> None:
+        self._lock = threading.RLock()
         self._items: dict[tuple[str, Provider, str], PrincipalMapping] = {}
 
     def resolve(self, tenant_id: str, provider: Provider, principal: str) -> Attribution:
@@ -64,15 +69,27 @@ class InMemoryMappingRepository:
         return Attribution(member=mapping.member, team=mapping.team)
 
     def put_mapping(self, tenant_id: str, mapping: PrincipalMapping) -> None:
-        self._items[(tenant_id, mapping.provider, mapping.principal)] = mapping
+        with self._lock:
+            self._items[(tenant_id, mapping.provider, mapping.principal)] = mapping
+            self._changed()
+
+    def delete_mapping(self, tenant_id: str, provider: Provider, principal: str) -> None:
+        with self._lock:
+            self._items.pop((tenant_id, provider, principal), None)
+            self._changed()
 
     def list_mappings(self, tenant_id: str) -> Sequence[PrincipalMapping]:
         return [m for (t, _, _), m in self._items.items() if t == tenant_id]
 
+    def _changed(self) -> None:
+        """Gancho para adaptadores con persistencia (ver ``adapters.localfs``)."""
+
 
 class InMemoryConfigRepository:
     def __init__(self) -> None:
+        self._lock = threading.RLock()
         self.connectors: dict[tuple[str, str], ConnectorConfig] = {}
+        self.statuses: dict[tuple[str, str], ConnectorStatus] = {}
         self.budgets: dict[tuple[str, str, str], Budget] = {}
         self.sent_alerts: set[str] = set()
 
@@ -80,19 +97,48 @@ class InMemoryConfigRepository:
         return [c for (t, _), c in self.connectors.items() if tenant_id in (None, t)]
 
     def put_connector(self, config: ConnectorConfig) -> None:
-        self.connectors[(config.tenant_id, config.connector_id)] = config
+        with self._lock:
+            self.connectors[(config.tenant_id, config.connector_id)] = config
+            self._changed()
+
+    def delete_connector(self, tenant_id: str, connector_id: str) -> None:
+        with self._lock:
+            self.connectors.pop((tenant_id, connector_id), None)
+            self.statuses.pop((tenant_id, connector_id), None)
+            self._changed()
+
+    def record_sync(self, tenant_id: str, connector_id: str, status: ConnectorStatus) -> None:
+        with self._lock:
+            if (tenant_id, connector_id) in self.connectors:
+                self.statuses[(tenant_id, connector_id)] = status
+                self._changed()
+
+    def list_statuses(self, tenant_id: str) -> Mapping[str, ConnectorStatus]:
+        return {cid: s for (t, cid), s in self.statuses.items() if t == tenant_id}
 
     def list_budgets(self, tenant_id: str) -> Sequence[Budget]:
         return [b for (t, _, _), b in self.budgets.items() if t == tenant_id]
 
     def put_budget(self, budget: Budget) -> None:
-        self.budgets[(budget.tenant_id, budget.team, budget.provider or "*")] = budget
+        with self._lock:
+            self.budgets[(budget.tenant_id, budget.team, budget.provider or "*")] = budget
+            self._changed()
+
+    def delete_budget(self, tenant_id: str, team: str, provider: Provider | None) -> None:
+        with self._lock:
+            self.budgets.pop((tenant_id, team, provider or "*"), None)
+            self._changed()
 
     def mark_alert_sent(self, alert_id: str) -> bool:
-        if alert_id in self.sent_alerts:
-            return False
-        self.sent_alerts.add(alert_id)
-        return True
+        with self._lock:
+            if alert_id in self.sent_alerts:
+                return False
+            self.sent_alerts.add(alert_id)
+            self._changed()
+            return True
+
+    def _changed(self) -> None:
+        """Gancho para adaptadores con persistencia (ver ``adapters.localfs``)."""
 
 
 class InMemoryQueue:
@@ -113,8 +159,26 @@ class InMemoryAlerts:
 
 
 class StaticSecrets:
+    """Almacén de secretos en memoria (pruebas). Implementa ``SecretStore``."""
+
     def __init__(self, secrets: Mapping[str, Mapping[str, str]] | None = None) -> None:
-        self._secrets = dict(secrets or {})
+        self._lock = threading.RLock()
+        self._secrets: dict[str, dict[str, str]] = {k: dict(v) for k, v in (secrets or {}).items()}
 
     def get_secret(self, secret_ref: str) -> Mapping[str, str]:
-        return self._secrets.get(secret_ref, {})
+        return dict(self._secrets.get(secret_ref, {}))
+
+    def put_secret(self, tenant_id: str, name: str, values: Mapping[str, str]) -> str:
+        with self._lock:
+            ref = f"local:{tenant_id}/{name}/{uuid.uuid4().hex[:8]}"
+            self._secrets[ref] = dict(values)
+            self._changed()
+            return ref
+
+    def delete_secret(self, secret_ref: str) -> None:
+        with self._lock:
+            self._secrets.pop(secret_ref, None)
+            self._changed()
+
+    def _changed(self) -> None:
+        """Gancho para adaptadores con persistencia (ver ``adapters.localfs``)."""

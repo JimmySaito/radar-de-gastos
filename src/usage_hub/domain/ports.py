@@ -19,6 +19,7 @@ from usage_hub.domain.models import (
     Attribution,
     Budget,
     ConnectorConfig,
+    ConnectorStatus,
     Metrics,
     PrincipalMapping,
     Provider,
@@ -63,6 +64,15 @@ class SecretProvider(Protocol):
     def get_secret(self, secret_ref: str) -> Mapping[str, str]: ...
 
 
+class SecretStore(SecretProvider, Protocol):
+    """Custodia de credenciales de conectores. Devuelve una referencia opaca (ARN o id)
+    que es lo único que se guarda en la configuración; el valor nunca sale hacia la UI."""
+
+    def put_secret(self, tenant_id: str, name: str, values: Mapping[str, str]) -> str: ...
+
+    def delete_secret(self, secret_ref: str) -> None: ...
+
+
 class UsageRepository(Protocol):
     """Ledger de hechos + modelo de lectura agregado."""
 
@@ -80,15 +90,25 @@ class MappingRepository(Protocol):
 
     def list_mappings(self, tenant_id: str) -> Sequence[PrincipalMapping]: ...
 
+    def delete_mapping(self, tenant_id: str, provider: Provider, principal: str) -> None: ...
+
 
 class ConfigRepository(Protocol):
     def list_connectors(self, tenant_id: str | None = None) -> Sequence[ConnectorConfig]: ...
 
     def put_connector(self, config: ConnectorConfig) -> None: ...
 
+    def delete_connector(self, tenant_id: str, connector_id: str) -> None: ...
+
+    def record_sync(self, tenant_id: str, connector_id: str, status: ConnectorStatus) -> None: ...
+
+    def list_statuses(self, tenant_id: str) -> Mapping[str, ConnectorStatus]: ...
+
     def list_budgets(self, tenant_id: str) -> Sequence[Budget]: ...
 
     def put_budget(self, budget: Budget) -> None: ...
+
+    def delete_budget(self, tenant_id: str, team: str, provider: Provider | None) -> None: ...
 
 
 class WorkQueue(Protocol):

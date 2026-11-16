@@ -11,7 +11,10 @@ SQS_MAX_BATCH = 10
 
 
 class SecretsManagerProvider:
-    """Lee secretos JSON con caché TTL en memoria (reduce latencia y costo por invocación)."""
+    """Secretos JSON en Secrets Manager con caché TTL en memoria (reduce latencia y costo).
+
+    Implementa ``SecretStore``: la API de configuración guarda aquí las credenciales que el
+    usuario ingresa y la configuración del conector sólo conserva el ARN."""
 
     def __init__(self, client: Any, ttl_seconds: float = 300.0) -> None:
         self._client = client
@@ -28,6 +31,27 @@ class SecretsManagerProvider:
         )
         self._cache[secret_ref] = (now, value)
         return value
+
+    def put_secret(self, tenant_id: str, name: str, values: Mapping[str, str]) -> str:
+        """Crea o actualiza ``usagehub/{tenant}/{name}``: el prefijo es el que autoriza IAM."""
+        secret_id = f"usagehub/{tenant_id}/{name}"
+        payload = json.dumps(dict(values))
+        try:
+            arn = self._client.create_secret(
+                Name=secret_id,
+                SecretString=payload,
+                Description="Credenciales de un conector de UsageHub",
+                Tags=[{"Key": "usagehub:tenant", "Value": tenant_id}],
+            )["ARN"]
+        except self._client.exceptions.ResourceExistsException:
+            arn = self._client.put_secret_value(SecretId=secret_id, SecretString=payload)["ARN"]
+        self._cache.pop(arn, None)
+        return str(arn)
+
+    def delete_secret(self, secret_ref: str) -> None:
+        # Ventana de recuperación de 7 días: un borrado accidental es reversible.
+        self._client.delete_secret(SecretId=secret_ref, RecoveryWindowInDays=7)
+        self._cache.pop(secret_ref, None)
 
 
 class SqsWorkQueue:

@@ -6,7 +6,7 @@ cualquier otro sistema, y **quién** de cada equipo lo consume.
 
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-blue)](.github/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.13-blue)
-![Coverage](https://img.shields.io/badge/coverage-94%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
 ![mypy](https://img.shields.io/badge/mypy-strict-blue)
 ![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC)
 
@@ -66,8 +66,38 @@ flowchart LR
 ```bash
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-python scripts/local_server.py                       # http://localhost:8080 con datos sintéticos
+python scripts/local_server.py                       # abrir http://localhost:8080
 ```
+
+## Uso
+
+La aplicación tiene dos vistas, que se eligen arriba a la izquierda:
+
+| Vista | Qué muestra |
+|---|---|
+| **Datos reales** | El consumo de *tu* organización. Al principio está vacía e invita a conectar fuentes. |
+| **Ejemplo** | Una organización ficticia (tenant `demo`, solo lectura) para explorar el producto. |
+
+Desde **Datos reales → Configuración**:
+
+1. **Conexiones:** elige el proveedor (Claude, OpenAI, AWS, Google o el generador de prueba), pega la credencial
+   que pide el formulario, pulsa *Probar conexión* (lee los últimos 3 días sin guardar nada) y luego *Guardar y
+   sincronizar*. Cada conexión muestra su último sync, cuántos registros trajo y el error si lo hubo.
+2. **Personas y equipos:** lista las identidades técnicas detectadas (usuarios, API keys, proyectos, tags), con
+   las no asignadas primero y el porcentaje de gasto ya atribuido. Asígnalas a una persona y un equipo.
+3. **Presupuestos:** límite mensual por equipo (y opcionalmente por proveedor), con alertas al 50/80/100 %.
+4. **Ingesta por API:** endpoint y ejemplo `curl` para que *cualquier* otro sistema reporte consumo.
+
+Las credenciales **nunca vuelven al navegador**. En AWS se guardan en Secrets Manager (`usagehub/{tenant}/…`);
+en local, en `~/.usagehub/` (o `$USAGEHUB_HOME`), fuera del repositorio. Al reiniciar el servidor local, la
+configuración se conserva y los últimos 30 días se resincronizan solos.
+
+| Proveedor | Qué credencial pide |
+|---|---|
+| Anthropic (Claude) | Admin API key `sk-ant-admin…` (requiere una organización en Claude Console) |
+| OpenAI | Admin key `sk-admin-…` (owner de la organización) |
+| AWS | Nada en local (usa tu perfil de AWS CLI) u opcionalmente un rol a asumir con External ID |
+| Google | Service account JSON + tabla de la exportación de facturación a BigQuery (`pip install -e ".[gcp]"`) |
 
 ## Calidad
 
@@ -77,8 +107,8 @@ make check          # ruff + mypy --strict + pytest (unitarias, integración con
 
 | Métrica | Valor |
 |---|---|
-| Pruebas | 65 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
-| Cobertura de ramas | 94,7 % (umbral de CI: 80 %) |
+| Pruebas | 87 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Cobertura de ramas | 95,2 % (umbral de CI: 80 %) |
 | Tipado | `mypy --strict` sin errores |
 | Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
 

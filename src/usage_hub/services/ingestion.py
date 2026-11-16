@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from usage_hub.connectors.registry import build_connector
-from usage_hub.domain.models import ConnectorConfig, UsageRecord
+from usage_hub.domain.models import ConnectorConfig, ConnectorStatus, UsageRecord
 from usage_hub.domain.ports import (
     CollectionWindow,
     ConfigRepository,
@@ -133,16 +133,58 @@ class UsageCollector:
         if isinstance(task, RecordsTask):
             return self._ingestor.ingest(task.records)
         config = self._find_config(task.tenant_id, task.connector_id)
-        secret = self._secrets.get_secret(config.secret_arn) if config.secret_arn else {}
-        connector = self._build(config, secret)
-        records = connector.fetch(task.tenant_id, CollectionWindow(task.start, task.end))
-        return self._ingestor.ingest(r for r in records if r.tenant_id == task.tenant_id)
+        secret: Mapping[str, str] = {}
+        try:
+            if config.secret_arn:
+                secret = self._secrets.get_secret(config.secret_arn)
+            connector = self._build(config, secret)
+            records = connector.fetch(task.tenant_id, CollectionWindow(task.start, task.end))
+            stats = self._ingestor.ingest(r for r in records if r.tenant_id == task.tenant_id)
+        except Exception as exc:
+            self._record(task, ok=False, error=safe_error(exc, list(secret.values())))
+            raise
+        self._record(task, ok=True, stats=stats)
+        return stats
+
+    def _record(
+        self,
+        task: CollectTask,
+        *,
+        ok: bool,
+        stats: IngestionStats | None = None,
+        error: str | None = None,
+    ) -> None:
+        self._configs.record_sync(
+            task.tenant_id,
+            task.connector_id,
+            ConnectorStatus(
+                last_sync_at=datetime.now(tz=UTC),
+                ok=ok,
+                written=stats.written if stats else 0,
+                unchanged=stats.outcomes[WriteOutcome.UNCHANGED] if stats else 0,
+                error=error,
+                window_start=task.start,
+                window_end=task.end,
+            ),
+        )
 
     def _find_config(self, tenant_id: str, connector_id: str) -> ConnectorConfig:
         for config in self._configs.list_connectors(tenant_id):
             if config.connector_id == connector_id:
                 return config
         raise LookupError(f"conector {connector_id} no existe para el tenant {tenant_id}")
+
+
+MAX_ERROR_LENGTH = 300
+
+
+def safe_error(exc: BaseException, secrets: Sequence[str] = ()) -> str:
+    """Mensaje de error apto para mostrar en la UI: sin credenciales y acotado."""
+    message = f"{type(exc).__name__}: {exc}"
+    for value in secrets:
+        if len(value) >= 4:  # noqa: PLR2004
+            message = message.replace(value, "****")
+    return message[:MAX_ERROR_LENGTH]
 
 
 def chunk_records(

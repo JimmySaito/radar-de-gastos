@@ -33,6 +33,7 @@ from usage_hub.domain.models import (
     Attribution,
     Budget,
     ConnectorConfig,
+    ConnectorStatus,
     Metrics,
     PrincipalMapping,
     Provider,
@@ -237,6 +238,12 @@ class DynamoMappingRepository:
         }
         self._db.put_item(TableName=self._table, Item=_serialize(item))
 
+    def delete_mapping(self, tenant_id: str, provider: Provider, principal: str) -> None:
+        self._db.delete_item(
+            TableName=self._table,
+            Key=_serialize(keys.mapping_key(tenant_id, provider.value, principal)),
+        )
+
     def list_mappings(self, tenant_id: str) -> Sequence[PrincipalMapping]:
         items = _query_all(self._db, self._table, f"T#{tenant_id}#MAP")
         return [
@@ -268,6 +275,33 @@ class DynamoConfigRepository:
         }
         self._db.put_item(TableName=self._table, Item=_serialize(item))
 
+    def delete_connector(self, tenant_id: str, connector_id: str) -> None:
+        self._db.delete_item(
+            TableName=self._table, Key=_serialize(keys.connector_key(tenant_id, connector_id))
+        )
+
+    def record_sync(self, tenant_id: str, connector_id: str, status: ConnectorStatus) -> None:
+        """Actualiza el estado sólo si el conector aún existe (no resucita borrados)."""
+        try:
+            self._db.update_item(
+                TableName=self._table,
+                Key=_serialize(keys.connector_key(tenant_id, connector_id)),
+                UpdateExpression="SET last_sync = :s",
+                ConditionExpression="attribute_exists(PK)",
+                ExpressionAttributeValues=_serialize({":s": status.model_dump(mode="json")}),
+            )
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
+
+    def list_statuses(self, tenant_id: str) -> Mapping[str, ConnectorStatus]:
+        items = _query_all(self._db, self._table, keys.CONNECTOR_PK, sk_prefix=f"{tenant_id}#")
+        return {
+            i["config"]["connector_id"]: ConnectorStatus.model_validate(i["last_sync"])
+            for i in items
+            if i.get("last_sync")
+        }
+
     def list_budgets(self, tenant_id: str) -> Sequence[Budget]:
         items = _query_all(self._db, self._table, f"T#{tenant_id}#BUDGET")
         return [Budget.model_validate(i["budget"]) for i in items]
@@ -279,6 +313,11 @@ class DynamoConfigRepository:
             "budget": budget.model_dump(mode="json"),
         }
         self._db.put_item(TableName=self._table, Item=_serialize(item))
+
+    def delete_budget(self, tenant_id: str, team: str, provider: Provider | None) -> None:
+        self._db.delete_item(
+            TableName=self._table, Key=_serialize(keys.budget_key(tenant_id, team, provider))
+        )
 
     def mark_alert_sent(self, alert_id: str) -> bool:
         """Put condicional: garantiza que cada umbral de presupuesto alerte una sola vez."""
