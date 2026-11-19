@@ -450,3 +450,61 @@ def test_personal_demo_is_read_only(memory_env: bootstrap.Container) -> None:
     assert [p["name"] for p in own] == ["Yo"]
     again = call(http_event("GET", "/v1/recurring/personal", claims=VIEWER, query=demo_q))[1]
     assert len(again["profiles"]) == 3
+
+
+# ---------------------------------------------------------------- dashboard servido por la API
+@pytest.fixture
+def web_env(memory_env: bootstrap.Container, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    from pathlib import Path
+
+    from radar_gastos.handlers import web
+
+    monkeypatch.setenv("WEB_ENABLED", "true")
+    monkeypatch.setenv("WEB_ROOT", str(Path(__file__).resolve().parents[2] / "frontend"))
+    monkeypatch.setenv("COGNITO_DOMAIN_URL", "https://auth.example.com")
+    monkeypatch.setenv("SPA_CLIENT_ID", "spa-client")
+    web.web_root.cache_clear()
+    yield
+    web.web_root.cache_clear()
+
+
+def raw_call(event: dict[str, Any]) -> dict[str, Any]:
+    from radar_gastos.handlers import api
+
+    return api.handler(event, Ctx())  # type: ignore[arg-type]
+
+
+def test_api_serves_dashboard_with_security_headers(web_env: None) -> None:
+    result = raw_call(http_event("GET", "/"))
+    assert result["statusCode"] == 200
+    assert "<title>" in result["body"]
+    headers = result["headers"]
+    assert headers["content-type"].startswith("text/html")
+    assert "script-src 'self';" in headers["content-security-policy"]
+    assert "https://auth.example.com" in headers["content-security-policy"]
+    assert headers["x-frame-options"] == "DENY"
+
+    script = raw_call(http_event("GET", "/vendor/chart.umd.min.js"))
+    assert script["headers"]["content-type"].startswith("application/javascript")
+
+
+def test_api_web_config_points_to_same_origin(web_env: None) -> None:
+    result = raw_call(http_event("GET", "/config.json"))
+    assert json.loads(result["body"]) == {
+        "apiBaseUrl": "",
+        "authMode": "cognito",
+        "cognitoDomain": "https://auth.example.com",
+        "clientId": "spa-client",
+    }
+
+
+def test_api_web_blocks_path_traversal_and_keeps_api_routes(web_env: None) -> None:
+    traversal = raw_call(http_event("GET", "/../pyproject.toml"))
+    assert "<title>" in traversal["body"]  # devuelve la SPA, nunca archivos de fuera
+    status, body = call(http_event("GET", "/v1/health"))
+    assert status == 200 and body["status"] == "ok"
+
+
+def test_api_does_not_serve_dashboard_unless_enabled(memory_env: bootstrap.Container) -> None:
+    status, _ = call(http_event("GET", "/"))
+    assert status == 404

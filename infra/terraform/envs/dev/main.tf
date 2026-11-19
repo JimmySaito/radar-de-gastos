@@ -1,5 +1,10 @@
 locals {
   name = "radar-gastos-${var.environment}"
+
+  # Cuenta restringida (AWS Academy): se usa LabRole y no hay X-Ray.
+  lab          = var.lab_role_arn != ""
+  lab_role     = local.lab ? var.lab_role_arn : null
+  tracing_mode = local.lab ? "PassThrough" : "Active"
 }
 
 data "aws_caller_identity" "current" {}
@@ -83,15 +88,21 @@ module "api_fn" {
   timeout_seconds = 29   # "Probar conexión" llama al proveedor; límite de integración de HTTP API: 30 s
   alarm_actions   = [aws_sns_topic.alerts.arn]
   kms_key_arn     = local.kms_key_arn
+  role_arn        = local.lab_role
+  tracing_mode    = local.tracing_mode
   environment = merge(local.common_env, {
     AUTH_MODE          = "jwt"
     DEMO_TENANT        = "demo"
     M2M_CLIENT_TENANTS = jsonencode({ (aws_cognito_user_pool_client.ingest.id) = var.m2m_tenant })
-  })
+    }, local.web_on_api ? {
+    # La API también sirve el dashboard (sin CloudFront).
+    WEB_ENABLED        = "true"
+    COGNITO_DOMAIN_URL = local.cognito_domain_url
+    SPA_CLIENT_ID      = aws_cognito_user_pool_client.spa.id
+  } : {})
   policy_json = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      local.kms_use_statement,
+    Statement = concat(local.kms_use_statements, [
       {
         Effect   = "Allow"
         Action   = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
@@ -110,7 +121,7 @@ module "api_fn" {
       # "Probar conexión" del conector AWS.
       { Effect = "Allow", Action = ["ce:GetCostAndUsage"], Resource = "*" },
       { Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:aws:iam::*:role/radar-gastos-cost-reader" },
-    ]
+    ])
   })
 }
 
@@ -125,11 +136,12 @@ module "collector_fn" {
   timeout_seconds = 60
   alarm_actions   = [aws_sns_topic.alerts.arn]
   kms_key_arn     = local.kms_key_arn
+  role_arn        = local.lab_role
+  tracing_mode    = local.tracing_mode
   environment     = local.common_env
   policy_json = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      local.kms_use_statement,
+    Statement = concat(local.kms_use_statements, [
       {
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:ConditionCheckItem"] # UpdateItem: estado de sincronización
@@ -143,7 +155,7 @@ module "collector_fn" {
       },
       { Effect = "Allow", Action = ["ce:GetCostAndUsage"], Resource = "*" },
       { Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:aws:iam::*:role/radar-gastos-cost-reader" },
-    ]
+    ])
   })
 }
 
@@ -170,14 +182,15 @@ module "scheduler_fn" {
   timeout_seconds = 30
   alarm_actions   = [aws_sns_topic.alerts.arn]
   kms_key_arn     = local.kms_key_arn
+  role_arn        = local.lab_role
+  tracing_mode    = local.tracing_mode
   environment     = local.common_env
   policy_json = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      local.kms_use_statement,
+    Statement = concat(local.kms_use_statements, [
       { Effect = "Allow", Action = ["dynamodb:Query"], Resource = local.table_arn },
       { Effect = "Allow", Action = ["sqs:SendMessage"], Resource = module.work_queue.queue_arn },
-    ]
+    ])
   })
 }
 
@@ -192,14 +205,15 @@ module "budget_fn" {
   timeout_seconds = 120
   alarm_actions   = [aws_sns_topic.alerts.arn]
   kms_key_arn     = local.kms_key_arn
+  role_arn        = local.lab_role
+  tracing_mode    = local.tracing_mode
   environment     = merge(local.common_env, { ALERT_TOPIC_ARN = aws_sns_topic.alerts.arn })
   policy_json = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      local.kms_use_statement,
+    Statement = concat(local.kms_use_statements, [
       { Effect = "Allow", Action = ["dynamodb:Query", "dynamodb:PutItem"], Resource = local.table_arn },
       { Effect = "Allow", Action = ["sns:Publish"], Resource = aws_sns_topic.alerts.arn },
-    ]
+    ])
   })
 }
 
@@ -215,24 +229,29 @@ data "aws_iam_policy_document" "scheduler_assume" {
 }
 
 resource "aws_iam_role" "scheduler" {
+  count              = local.lab ? 0 : 1
   name               = "${local.name}-eventbridge-scheduler"
   assume_role_policy = data.aws_iam_policy_document.scheduler_assume.json
 }
 
 resource "aws_iam_role_policy" "scheduler" {
-  role = aws_iam_role.scheduler.id
+  count = local.lab ? 0 : 1
+  role  = aws_iam_role.scheduler[0].id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    # Los horarios están cifrados con la CMK (si existe).
+    Statement = concat(local.kms_decrypt_statements, [
       {
         Effect   = "Allow"
         Action   = "lambda:InvokeFunction"
         Resource = [module.scheduler_fn.function_arn, module.budget_fn.function_arn]
       },
-      # Los horarios están cifrados con la CMK.
-      { Effect = "Allow", Action = ["kms:Decrypt"], Resource = local.kms_key_arn },
-    ]
+    ])
   })
+}
+
+locals {
+  scheduler_role_arn = local.lab ? var.lab_role_arn : aws_iam_role.scheduler[0].arn
 }
 
 resource "aws_scheduler_schedule" "collect" {
@@ -245,7 +264,7 @@ resource "aws_scheduler_schedule" "collect" {
   }
   target {
     arn      = module.scheduler_fn.function_arn
-    role_arn = aws_iam_role.scheduler.arn
+    role_arn = local.scheduler_role_arn
     retry_policy {
       maximum_retry_attempts = 3
     }
@@ -262,6 +281,6 @@ resource "aws_scheduler_schedule" "budgets" {
   }
   target {
     arn      = module.budget_fn.function_arn
-    role_arn = aws_iam_role.scheduler.arn
+    role_arn = local.scheduler_role_arn
   }
 }

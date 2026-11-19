@@ -13,26 +13,36 @@ data "aws_iam_policy_document" "assume" {
   }
 }
 
+locals {
+  # Sin role_arn el módulo crea un rol propio de mínimo privilegio; con role_arn usa uno existente
+  # (p. ej. LabRole en AWS Academy, donde no se pueden crear roles).
+  create_role = var.role_arn == null
+  role_arn    = local.create_role ? aws_iam_role.this[0].arn : var.role_arn
+}
+
 resource "aws_iam_role" "this" {
+  count              = local.create_role ? 1 : 0
   name               = "${var.name}-role"
   assume_role_policy = data.aws_iam_policy_document.assume.json
   tags               = var.tags
 }
 
 resource "aws_iam_role_policy_attachment" "basic" {
-  role       = aws_iam_role.this.name
+  count      = local.create_role ? 1 : 0
+  role       = aws_iam_role.this[0].name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "xray" {
-  role       = aws_iam_role.this.name
+  count      = local.create_role && var.tracing_mode == "Active" ? 1 : 0
+  role       = aws_iam_role.this[0].name
   policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 }
 
 resource "aws_iam_role_policy" "inline" {
-  count  = var.policy_json == null ? 0 : 1
+  count  = local.create_role && var.policy_json != null ? 1 : 0
   name   = "${var.name}-policy"
-  role   = aws_iam_role.this.id
+  role   = aws_iam_role.this[0].id
   policy = var.policy_json
 }
 
@@ -50,7 +60,7 @@ resource "aws_lambda_function" "this" {
   function_name                  = var.name
   kms_key_arn                    = var.kms_key_arn
   description                    = var.description
-  role                           = aws_iam_role.this.arn
+  role                           = local.role_arn
   runtime                        = "python3.13"
   architectures                  = ["arm64"]
   handler                        = var.handler
@@ -66,11 +76,12 @@ resource "aws_lambda_function" "this" {
       POWERTOOLS_SERVICE_NAME      = var.name
       POWERTOOLS_METRICS_NAMESPACE = "RadarDeGastos"
       POWERTOOLS_LOG_LEVEL         = var.log_level
+      POWERTOOLS_TRACE_DISABLED    = var.tracing_mode == "Active" ? "false" : "true"
     }, var.environment)
   }
 
   tracing_config {
-    mode = "Active"
+    mode = var.tracing_mode
   }
 
   logging_config {
@@ -78,7 +89,7 @@ resource "aws_lambda_function" "this" {
     log_group  = aws_cloudwatch_log_group.this.name
   }
 
-  depends_on = [aws_iam_role_policy_attachment.basic, aws_cloudwatch_log_group.this]
+  depends_on = [aws_iam_role_policy_attachment.basic, aws_iam_role_policy.inline, aws_cloudwatch_log_group.this]
   tags       = var.tags
 }
 

@@ -14,6 +14,7 @@ locals {
 }
 
 resource "aws_kms_key" "data" {
+  count                   = var.enable_cmk ? 1 : 0
   description             = "${local.name}: cifrado de datos en reposo"
   enable_key_rotation     = true
   rotation_period_in_days = 365
@@ -58,17 +59,24 @@ resource "aws_kms_key" "data" {
 }
 
 resource "aws_kms_alias" "data" {
+  count         = var.enable_cmk ? 1 : 0
   name          = "alias/${local.name}"
-  target_key_id = aws_kms_key.data.key_id
+  target_key_id = aws_kms_key.data[0].key_id
 }
 
 locals {
-  kms_key_arn = aws_kms_key.data.arn
+  # null: los recursos usan la llave administrada por AWS (o ninguna, en SNS).
+  kms_key_arn = var.enable_cmk ? aws_kms_key.data[0].arn : null
 
   # Permiso que necesita cada función para leer y escribir la tabla y el tópico cifrados.
-  kms_use_statement = {
+  kms_use_statements = var.enable_cmk ? [{
     Effect   = "Allow"
     Action   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-    Resource = aws_kms_key.data.arn
-  }
+    Resource = aws_kms_key.data[0].arn
+  }] : []
+  kms_decrypt_statements = var.enable_cmk ? [{
+    Effect   = "Allow"
+    Action   = ["kms:Decrypt"]
+    Resource = aws_kms_key.data[0].arn
+  }] : []
 }

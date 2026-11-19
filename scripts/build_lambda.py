@@ -64,6 +64,11 @@ def main() -> None:
         BUILD.parent, DIST / "layer.zip", BUILD.parent
     )  # entradas "python/..." (formato de layer)
     zip_dir(ROOT / "src" / "radar_gastos", DIST / "app.zip", ROOT / "src")
+    # El dashboard viaja en el paquete por si la API debe servirlo (sin CloudFront).
+    with zipfile.ZipFile(DIST / "app.zip", "a", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        for path in sorted((ROOT / "frontend").rglob("*")):
+            if path.is_file():
+                zf.write(path, path.relative_to(ROOT))
     for artifact in ("layer.zip", "app.zip"):
         print(f"{artifact}: {(DIST / artifact).stat().st_size / 1_048_576:.1f} MiB")
 

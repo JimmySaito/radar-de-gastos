@@ -11,6 +11,10 @@
 
     Se puede ejecutar las veces que haga falta: si no hay cambios, no cambia nada.
 
+    En AWS Academy Learner Lab (rol voclabs) se activa solo el modo laboratorio: las funciones
+    usan LabRole, se desactiva X-Ray, se usan llaves administradas por AWS y la propia API sirve
+    el dashboard, porque el laboratorio no permite crear roles IAM ni usar CloudFront.
+
 .EXAMPLE
     .\scripts\deploy_aws.ps1 -AdminEmail tu@correo.com
 
@@ -84,11 +88,24 @@ if ($AwsProfile) { $env:AWS_PROFILE = $AwsProfile }
 $env:AWS_REGION = $Region
 $env:AWS_DEFAULT_REGION = $Region
 
-$account = Invoke-Quiet "aws" @("sts", "get-caller-identity", "--query", "Account", "--output", "text")
-if ($LASTEXITCODE -ne 0 -or -not $account) {
-    throw "No hay una sesión de AWS abierta. Ejecuta 'aws login' (o 'aws configure sso') y vuelve a intentarlo."
+$identity = Invoke-Quiet "aws" @("sts", "get-caller-identity", "--query", "[Account, Arn]", "--output", "text")
+if ($LASTEXITCODE -ne 0 -or -not $identity) {
+    throw "No hay una sesión de AWS abierta. Ejecuta 'aws login' (o, en AWS Academy, copia las credenciales de 'AWS Details' a ~\.aws\credentials) y vuelve a intentarlo."
 }
-Write-Host "Cuenta de AWS: $(($account | Out-String).Trim())   Región: $Region"
+$account, $callerArn = (($identity | Out-String).Trim() -split '\s+')
+$IsLab = $callerArn -like "*:assumed-role/voclabs/*"
+Write-Host "Cuenta de AWS: $account   Región: $Region"
+
+$LabRoleArn = ""
+if ($IsLab) {
+    if ($Region -notin @("us-east-1", "us-west-2")) {
+        throw "AWS Academy solo permite us-east-1 o us-west-2 (región actual: $Region)."
+    }
+    $LabRoleArn = ((Invoke-Quiet "aws" @("iam", "get-role", "--role-name", "LabRole", "--query", "Role.Arn", "--output", "text")) | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $LabRoleArn) { throw "Es una cuenta de AWS Academy pero no se encontró el rol LabRole." }
+    Write-Host "AWS Academy Learner Lab detectado: se usará LabRole y la API servirá el dashboard." -ForegroundColor Yellow
+    Write-Host "Las credenciales del laboratorio caducan al terminar la sesión: si algo falla por credenciales, cópialas de nuevo." -ForegroundColor Yellow
+}
 
 # ---------------------------------------------------------------- eliminar
 if ($Destroy) {
@@ -125,6 +142,19 @@ if (-not (Test-Path $TfVars)) {
     ) -join "`n"
     [System.IO.File]::WriteAllText($TfVars, "$content`n", (New-Object System.Text.UTF8Encoding $false))
     Write-Host "Guardado en $TfVars (no se sube a Git)."
+}
+
+# Modo laboratorio: se agrega una sola vez a terraform.tfvars.
+if ($IsLab -and -not (Select-String -Path $TfVars -Pattern '^\s*lab_role_arn' -Quiet)) {
+    $lab = @(
+        ""
+        "# AWS Academy Learner Lab: sin roles IAM propios, sin CloudFront ni X-Ray."
+        "lab_role_arn     = ""$LabRoleArn"""
+        "enable_cmk       = false"
+        "frontend_hosting = ""api"""
+    ) -join "`n"
+    [System.IO.File]::AppendAllText($TfVars, "$lab`n", (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "Modo laboratorio agregado a terraform.tfvars."
 }
 
 # ---------------------------------------------------------------- empaquetado
@@ -180,5 +210,9 @@ Write-Host "  Dashboard:  $dashboard"
 Write-Host "  API:        $api"
 Write-Host "  Operación:  $ops"
 Write-Host ""
-Write-Host "La primera vez CloudFront puede tardar unos minutos en responder."
+if ($IsLab) {
+    Write-Host "En el laboratorio, todo deja de responder cuando termina la sesión; vuelve a 'Start Lab' para reanudar."
+} else {
+    Write-Host "La primera vez CloudFront puede tardar unos minutos en responder."
+}
 Write-Host "Para borrar todo y dejar de pagar: .\scripts\deploy_aws.ps1 -Destroy"

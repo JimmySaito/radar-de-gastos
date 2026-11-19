@@ -75,8 +75,8 @@ resource "aws_cognito_user_pool_client" "spa" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
   supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = ["${module.frontend.url}/", "http://localhost:8080/"]
-  logout_urls                          = ["${module.frontend.url}/", "http://localhost:8080/"]
+  callback_urls                        = ["${local.dashboard_url}/", "http://localhost:8080/"]
+  logout_urls                          = ["${local.dashboard_url}/", "http://localhost:8080/"]
   read_attributes                      = ["email", "custom:tenant_id"]
   write_attributes                     = ["email"]
   prevent_user_existence_errors        = "ENABLED"

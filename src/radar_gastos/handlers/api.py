@@ -50,6 +50,7 @@ from radar_gastos.domain.ledger import Dimension
 from radar_gastos.domain.models import Budget, Identifier, PrincipalMapping, Provider, UsageRecord
 from radar_gastos.domain.recurring import Scope
 from radar_gastos.domain.recurring_catalog import catalog as recurring_catalog
+from radar_gastos.handlers import web
 from radar_gastos.handlers.bootstrap import container, today_utc
 from radar_gastos.services.budgets import BudgetEvaluator
 from radar_gastos.services.connections import (
@@ -506,4 +507,6 @@ def delete_profile(profile_id: str) -> dict[str, Any]:
 @tracer.capture_lambda_handler
 @metrics.log_metrics
 def handler(event: dict[str, Any], context: LambdaContext) -> dict[str, Any]:
+    if web.enabled() and web.is_web_request(event):
+        return web.serve(event)
     return app.resolve(event, context)

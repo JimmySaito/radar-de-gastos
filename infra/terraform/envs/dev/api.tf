@@ -78,6 +78,16 @@ resource "aws_apigatewayv2_route" "health" {
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
+# Sin CloudFront, la API entrega el dashboard: "/" y cualquier ruta fuera de /v1 (las rutas
+# /v1 definidas arriba tienen prioridad sobre {proxy+}).
+resource "aws_apigatewayv2_route" "web" {
+  for_each = local.web_on_api ? toset(["GET /", "GET /{proxy+}"]) : toset([])
+  # checkov:skip=CKV_AWS_309: archivos públicos del dashboard; los datos siguen protegidos por JWT en /v1
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = each.value
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
 resource "aws_cloudwatch_log_group" "api_access" {
   name              = "/aws/apigateway/${local.name}"
   retention_in_days = var.log_retention_days # auditoría: quién llamó qué ruta

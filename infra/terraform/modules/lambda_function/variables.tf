@@ -81,3 +81,19 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "role_arn" {
+  description = "Rol existente para la función. Si es null, el módulo crea uno con policy_json."
+  type        = string
+  default     = null
+}
+
+variable "tracing_mode" {
+  description = "X-Ray: Active, o PassThrough donde X-Ray no está disponible."
+  type        = string
+  default     = "Active"
+  validation {
+    condition     = contains(["Active", "PassThrough"], var.tracing_mode)
+    error_message = "tracing_mode debe ser Active o PassThrough."
+  }
+}

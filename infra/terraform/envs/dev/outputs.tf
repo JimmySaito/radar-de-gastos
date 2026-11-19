@@ -3,7 +3,7 @@ output "api_url" {
 }
 
 output "dashboard_url" {
-  value = module.frontend.url
+  value = "${local.dashboard_url}/"
 }
 
 output "cognito_domain" {

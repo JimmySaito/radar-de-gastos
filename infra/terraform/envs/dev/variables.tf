@@ -67,3 +67,29 @@ variable "log_retention_days" {
   type        = number
   default     = 365
 }
+
+# ---------------------------------------------------------------- cuentas restringidas
+# AWS Academy Learner Lab no permite crear roles IAM ni usar CloudFront o X-Ray.
+# scripts/deploy_aws.ps1 detecta el laboratorio y fija estas tres variables.
+
+variable "lab_role_arn" {
+  description = "Rol existente (LabRole) para Lambdas y Scheduler. Vacío: se crean roles de mínimo privilegio."
+  type        = string
+  default     = ""
+}
+
+variable "enable_cmk" {
+  description = "Cifrar con una llave KMS propia. Si es false se usan las llaves administradas por AWS."
+  type        = bool
+  default     = true
+}
+
+variable "frontend_hosting" {
+  description = "Dónde se sirve el dashboard: cloudfront (S3 + CloudFront) o api (la propia API, sin CloudFront)."
+  type        = string
+  default     = "cloudfront"
+  validation {
+    condition     = contains(["cloudfront", "api"], var.frontend_hosting)
+    error_message = "frontend_hosting debe ser cloudfront o api."
+  }
+}

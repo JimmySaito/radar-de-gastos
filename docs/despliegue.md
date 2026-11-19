@@ -83,6 +83,29 @@ El estado de Terraform se guarda en `infra/terraform/envs/dev/terraform.tfstate`
 el despliegue, porque es lo que permite actualizarlo o eliminarlo. Para guardarlo en S3, ver
 `backend.tf.example`.
 
+### AWS Academy Learner Lab
+
+El laboratorio no permite crear roles IAM ni usar CloudFront o X-Ray. El script lo detecta (rol `voclabs`) y
+activa solo el **modo laboratorio**, que cambia esto:
+
+| | Despliegue normal | Learner Lab |
+|---|---|---|
+| Roles de las funciones y del Scheduler | Uno por función, de mínimo privilegio | `LabRole`, el rol del laboratorio |
+| Dashboard | S3 + CloudFront | La propia API (HTTPS de API Gateway) |
+| Cifrado | Llave KMS propia | Llaves administradas por AWS |
+| Trazas X-Ray | Activas | Desactivadas |
+
+El resto (Lambda, SQS, DynamoDB, Cognito, Scheduler, alarmas) es idéntico. Pasos:
+
+1. En AWS Academy: **Modules → Learner Lab → Start Lab** y espera el punto verde.
+2. **AWS Details → AWS CLI: Show**: copia el bloque y pégalo en `notepad $HOME\.aws\credentials`. Al guardar,
+   el archivo debe llamarse `credentials`, **sin** `.txt` (en el cuadro de guardar elige *Todos los archivos*).
+3. `aws configure set region us-east-1` y comprueba con `aws sts get-caller-identity` (debe decir `voclabs`).
+4. `.\scripts\deploy_aws.ps1 -AdminEmail tu@correo.com -Tenant mi-empresa`.
+
+Las credenciales cambian en cada sesión del laboratorio: repite el paso 2 cada vez. Al terminar la sesión los
+recursos se conservan, pero no responden hasta que vuelvas a iniciarla.
+
 ## 3. Plan de respaldo para la presentación
 
 **El día anterior**
