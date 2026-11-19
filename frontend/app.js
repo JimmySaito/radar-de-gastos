@@ -109,7 +109,7 @@ const LEGACY = { real: "#/empresa/real", ejemplo: "#/empresa/ejemplo", configura
 
 function route() {
   const parts = (location.hash || "#/empresa/real").split("/").slice(1);
-  if (parts[0] === "personal") return { space: "personal", view: parts[1] === "configuracion" ? "configuracion" : "panel", tab: null };
+  if (parts[0] === "personal") return { space: "personal", view: ["configuracion", "ejemplo"].includes(parts[1]) ? parts[1] : "real", tab: null };
   const view = ["real", "ejemplo", "configuracion"].includes(parts[1]) ? parts[1] : "real";
   return { space: "empresa", view, tab: parts[2] || "conexiones" };
 }
@@ -128,6 +128,7 @@ async function render() {
   const isSettings = view === "configuracion";
   const isDemo = view === "ejemplo";
   setCurrent(document.querySelectorAll("[data-space]"), (a) => a.dataset.space === space);
+  setCurrent(document.querySelectorAll("[data-pview]"), (a) => !empresa && a.dataset.pview === view);
   setCurrent(document.querySelectorAll("[data-view]"), (a) => empresa && !isSettings && a.dataset.view === view);
   $("views").hidden = !empresa;
   $("filters").hidden = !empresa || isSettings;
@@ -159,10 +160,10 @@ async function render() {
   $("backLabel").textContent = `Volver a ${VIEW_LABEL[state.lastView]}`;
   if (empresa && isSettings) { state.lastTab = tab; $("crumbTab").textContent = TAB_LABEL[tab] || tab; }
   document.title = !empresa
-    ? `${isSettings ? "Configuración · " : ""}Personal · UsageHub`
+    ? `${isSettings ? "Configuración · " : isDemo ? "Ejemplo · " : ""}Personal · UsageHub`
     : isSettings ? `${TAB_LABEL[tab] || "Configuración"} · Empresa · UsageHub` : `${VIEW_LABEL[state.lastView]} · Empresa · UsageHub`;
 
-  if (!empresa) await (isSettings ? renderPersonalSettings() : renderPersonal());
+  if (!empresa) await (isSettings ? renderPersonalSettings() : renderPersonal(isDemo));
   else if (isSettings) await renderSettings(tab);
   else await renderDashboard(isDemo);
 }
@@ -612,7 +613,10 @@ function renderIngest(panel) {
 // ------------------------------------------------------------------ gastos recurrentes
 // Personal: suscripciones de cada persona (streaming, música, IA, software...).
 // Empresa: licencias SaaS del tenant. Los montos se muestran en su moneda, sin conversión.
-const RECUR = { catalogs: {}, editing: null, scope: "personal" };
+const RECUR = { catalogs: {}, editing: null, scope: "personal", profiles: [], member: { real: null, ejemplo: null } };
+const personColor = (i) => seriesColor(i);
+const initials = (name) => (name === "Sin asignar" ? "?" : name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase());
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const CURRENCIES = ["USD", "COP", "MXN", "EUR", "ARS", "CLP", "PEN", "BRL", "GBP", "CAD"];
 const ZERO_DECIMALS = new Set(["COP", "CLP", "JPY", "KRW", "PYG"]);
 const CYCLE_LABEL = { weekly: "Semanal", monthly: "Mensual", quarterly: "Trimestral", annual: "Anual" };
@@ -688,17 +692,23 @@ function categoryChart(id, summary, cat) {
   return currencies.length > 1 ? `Mostrando ${currency}. También tienes gastos en ${currencies.filter((c) => c !== currency).join(", ")}.` : "";
 }
 
-function expenseTable(items, cat, { business = false, actions = true } = {}) {
+function whoCell(e) {
+  if (!e.member_names?.length) return '<span class="muted">Sin asignar</span>';
+  return `${e.member_names.map((n) => esc(n)).join(", ")}${e.member_names.length > 1 ? ` <span class="chip">Compartida</span>` : ""}`;
+}
+
+function expenseTable(items, cat, { business = false, actions = true, people = false, partial = false } = {}) {
   if (!items.length) return '<p class="muted">Sin registros todavía.</p>';
   return `<div class="table-scroll"><table class="data"><thead><tr>
-      <th>Servicio</th><th>Categoría</th><th>Ciclo</th>${business ? '<th class="num">Usuarios</th>' : ""}<th class="num">Cobro</th><th class="num">Equivalente mensual</th><th>Próximo cobro</th>${actions ? "<th></th>" : ""}
+      <th>Servicio</th>${people ? "<th>De quién</th>" : ""}<th>Categoría</th><th>Ciclo</th>${business ? '<th class="num">Usuarios</th>' : ""}<th class="num">${partial ? "Su parte" : "Cobro"}</th><th class="num">Equivalente mensual</th><th>Próximo cobro</th>${actions ? "<th></th>" : ""}
     </tr></thead><tbody>
     ${items.map((e) => `<tr data-id="${esc(e.expense_id)}" class="${e.active ? "" : "inactive"}">
       <td><strong>${esc(e.name)}</strong>${e.plan ? ` <span class="muted">· ${esc(e.plan)}</span>` : ""}${e.active ? "" : ' <span class="chip">Cancelada</span>'}${business && e.owner ? `<div class="muted small">${esc(e.owner)}${e.team ? ` · ${esc(e.team)}` : ""}</div>` : ""}</td>
+      ${people ? `<td>${whoCell(e)}</td>` : ""}
       <td><span class="swatch" style="background:${categoryColor(cat, e.category)}"></span>${esc(categoryLabel(cat, e.category))}</td>
       <td>${CYCLE_LABEL[e.cycle]}</td>
       ${business ? `<td class="num">${e.seats}</td>` : ""}
-      <td class="num">${money(e.charge, e.currency)}</td>
+      <td class="num">${money(e.charge, e.currency)}${partial && e.charge !== e.full_charge ? `<div class="muted small">de ${money(e.full_charge, e.currency)}</div>` : ""}</td>
       <td class="num">${money(e.monthly_equivalent, e.currency)}</td>
       <td>${e.next_charge ? `${shortDate(e.next_charge)} <span class="muted">(${dueLabel(e.days_left)})</span>` : "—"}</td>
       ${actions ? '<td class="row-actions"><button class="btn small" data-act="edit" type="button">Editar</button></td>' : ""}
@@ -711,19 +721,70 @@ function bindEdit(container, items, scope) {
   });
 }
 
-async function renderPersonal() {
+function personFilter(data, isDemo) {
+  const el = $("personFilter");
+  const people = data.by_member;
+  el.hidden = !data.profiles.length;
+  if (el.hidden) return;
+  const key = isDemo ? "ejemplo" : "real";
+  const current = RECUR.member[key];
+  const chip = (id, label, color) => `<button type="button" class="person-chip" data-member="${esc(id ?? "")}" aria-pressed="${String((current ?? null) === id)}">
+    ${color ? `<span class="avatar xs" style="background:${color}">${esc(initials(label))}</span>` : ""}${esc(label)}</button>`;
+  el.innerHTML = `<span class="muted small">Ver:</span>${chip(null, "Todos")}${people.map((p, i) => chip(p.member_id, p.name, p.member_id === "sin-asignar" ? css("--text-muted") : personColor(i))).join("")}`;
+  el.querySelectorAll("[data-member]").forEach((b) => {
+    b.onclick = () => { RECUR.member[key] = b.dataset.member || null; render(); };
+  });
+}
+
+function peopleCard(data) {
+  const people = data.by_member;
+  if (!people.length) return "";
+  const main = prefCurrency();
+  const currencies = [...new Set(people.flatMap((p) => Object.keys(p.monthly)))];
+  const cur = currencies.includes(main) ? main : currencies[0];
+  const max = Math.max(...people.map((p) => Number(p.monthly[cur] || 0)), 1);
+  return `<section class="card wide-2">
+    <div class="card-head"><h2>Gasto por persona</h2><span class="muted small">Equivalente mensual · lo compartido se divide en partes iguales</span></div>
+    <div class="people">${people.map((p, i) => {
+      const color = p.member_id === "sin-asignar" ? css("--text-muted") : personColor(i);
+      const value = Number(p.monthly[cur] || 0);
+      return `<button type="button" class="person-row" data-member="${esc(p.member_id)}" title="Ver solo ${esc(p.name)}">
+        <span class="avatar" style="background:${color}">${esc(initials(p.name))}</span>
+        <span class="person-name"><strong>${esc(p.name)}</strong><span class="muted small">${p.relation ? `${esc(p.relation)} · ` : ""}${plural(p.count, "suscripción", "suscripciones")}${p.shared ? ` (${plural(p.shared, "compartida", "compartidas")})` : ""}</span></span>
+        <span class="person-bar" aria-hidden="true"><i style="width:${(100 * value / max).toFixed(1)}%;background:${color}"></i></span>
+        <span class="person-amount">${moneyLines(p.monthly).map((l) => `<span>${l}</span>`).join("") || "—"}</span>
+      </button>`;
+    }).join("")}</div>
+  </section>`;
+}
+
+async function renderPersonal(isDemo = false) {
   const body = $("personalBody");
+  const key = isDemo ? "ejemplo" : "real";
+  $("personalDemoNotice").hidden = !isDemo;
+  $("personalAdd").hidden = isDemo;
   body.innerHTML = '<p class="muted">Cargando…</p>';
   try {
-    const [data, cat] = await Promise.all([api("/v1/recurring/personal"), recurringCatalog("personal")]);
+    const params = { dataset: isDemo ? "demo" : undefined, member: RECUR.member[key] || undefined };
+    let data;
+    try { data = await api("/v1/recurring/personal", { params }); }
+    catch (e) { if (!params.member) throw e; RECUR.member[key] = null; data = await api("/v1/recurring/personal", { params: { ...params, member: undefined } }); }
+    const cat = await recurringCatalog("personal");
+    if (!isDemo) RECUR.profiles = data.profiles;
+    personFilter(data, isDemo);
     const { items, summary } = data;
-    if (!items.length) {
+    const who = data.member ? data.by_member.find((p) => p.member_id === data.member)?.name : null;
+    $("personalTitle").textContent = who ? `Suscripciones de ${who}` : (isDemo ? "Suscripciones del hogar (ejemplo)" : "Mis suscripciones");
+
+    if (!items.length && !data.member) {
       const quick = cat.services.filter((s) => QUICK_ADD.includes(s.key));
       body.innerHTML = `<div class="empty">
         <h1>Lleva el control de tus suscripciones</h1>
-        <p>Agrega lo que pagas cada mes o cada año, con su fecha de cobro, y verás cuánto gastas, qué se cobra pronto y cuánto suma al año.</p>
+        <p>Agrega lo que pagas cada mes o cada año, con su fecha de cobro, y verás cuánto gastas, qué se cobra pronto y cuánto suma al año. Puedes crear personas (por ejemplo, tú y tu familia) para ver el gasto de cada una.</p>
         <div class="quick-add">${quick.map((s) => `<button type="button" class="btn" data-quick="${esc(s.key)}">+ ${esc(s.name)}</button>`).join("")}</div>
-        <div class="row"><button type="button" class="btn primary" data-add-expense="personal">Agregar otra suscripción</button></div>
+        <div class="row"><button type="button" class="btn primary" data-add-expense="personal">Agregar otra suscripción</button>
+          <a class="btn" href="#/personal/configuracion">Crear personas</a>
+          <a class="btn" href="#/personal/ejemplo">Ver el ejemplo</a></div>
       </div>`;
       body.querySelectorAll("[data-quick]").forEach((b) => { b.onclick = () => openExpenseDialog("personal", null, b.dataset.quick); });
       body.querySelector("[data-add-expense]").onclick = () => openExpenseDialog("personal");
@@ -731,14 +792,16 @@ async function renderPersonal() {
     }
     const next = summary.next_charge;
     const multi = (v) => moneyLines(v).map((l) => `<span class="money-line">${l}</span>`).join("") || money(0, prefCurrency());
+    const share = who ? " (su parte)" : "";
     body.innerHTML = `
       <section class="kpis" aria-label="Resumen">
-        <article class="kpi"><h2>Gasto mensual</h2><p class="value stack-lines">${multi(summary.monthly_equivalent)}</p><p class="sub">${summary.active_count} suscripciones activas · equivalente mensual</p></article>
-        <article class="kpi"><h2>Cobros de este mes</h2><p class="value stack-lines">${multi(summary.this_month.total)}</p><p class="sub">${summary.this_month.charges} cobros · quedan ${moneyText(summary.this_month.remaining)}</p></article>
+        <article class="kpi"><h2>Gasto mensual${share}</h2><p class="value stack-lines">${multi(summary.monthly_equivalent)}</p><p class="sub">${summary.active_count} suscripciones activas · equivalente mensual</p></article>
+        <article class="kpi"><h2>Cobros de este mes${share}</h2><p class="value stack-lines">${multi(summary.this_month.total)}</p><p class="sub">${summary.this_month.charges} cobros · quedan ${moneyText(summary.this_month.remaining)}</p></article>
         <article class="kpi"><h2>Próximo cobro</h2><p class="value">${next ? esc(next.name) : "—"}</p><p class="sub">${next ? `${money(next.amount, next.currency)} · ${shortDate(next.date)} (${dueLabel(next.days_left)})` : "Sin cobros programados"}</p></article>
-        <article class="kpi"><h2>Proyección anual</h2><p class="value stack-lines">${multi(summary.annual_projection)}</p><p class="sub">si mantienes las suscripciones actuales</p></article>
+        <article class="kpi"><h2>Proyección anual${share}</h2><p class="value stack-lines">${multi(summary.annual_projection)}</p><p class="sub">si se mantienen las suscripciones actuales</p></article>
       </section>
       <div class="grid">
+        ${data.member ? "" : peopleCard(data)}
         <section class="card">
           <div class="card-head"><h2>Próximos cobros (31 días)</h2></div>
           ${summary.upcoming.length ? `<ul class="charges">${summary.upcoming.slice(0, 8).map((c) => chargeItem(c, cat)).join("")}</ul>` : '<p class="muted">No hay cobros en los próximos 31 días.</p>'}
@@ -750,14 +813,15 @@ async function renderPersonal() {
           <p class="muted small" id="categoryNote"></p>
         </section>
         <section class="card wide-2">
-          <div class="card-head"><h2>Todas tus suscripciones (${items.length})</h2><a class="link" href="#/personal/configuracion">Administrar</a></div>
-          <div id="personalTable">${expenseTable(items, cat)}</div>
+          <div class="card-head"><h2>${who ? `Suscripciones de ${esc(who)}` : "Todas las suscripciones"} (${items.length})</h2>${isDemo ? "" : '<a class="link" href="#/personal/configuracion">Administrar</a>'}</div>
+          <div id="personalTable">${expenseTable(items, cat, { actions: !isDemo, people: Boolean(data.profiles.length), partial: Boolean(who) })}</div>
         </section>
       </div>`;
-    $("categoryNote").textContent = categoryChart("categoryChart", summary, cat);
-    bindEdit($("personalTable"), items, "personal");
+    if (summary.by_category.length) $("categoryNote").textContent = categoryChart("categoryChart", summary, cat);
+    body.querySelectorAll(".person-row").forEach((b) => { b.onclick = () => { RECUR.member[key] = b.dataset.member; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }; });
+    if (!isDemo) bindEdit($("personalTable"), items, "personal");
   } catch (err) {
-    body.innerHTML = `<p class="banner error">No se pudieron cargar tus suscripciones: ${esc(err.message)}</p>`;
+    body.innerHTML = `<p class="banner error">No se pudieron cargar las suscripciones: ${esc(err.message)}</p>`;
   }
 }
 
@@ -766,26 +830,65 @@ async function renderPersonalSettings() {
   body.innerHTML = '<p class="muted">Cargando…</p>';
   try {
     const [data, cat] = await Promise.all([api("/v1/recurring/personal"), recurringCatalog("personal")]);
+    RECUR.profiles = data.profiles;
+    const stats = Object.fromEntries(data.by_member.map((p) => [p.member_id, p]));
     body.innerHTML = `
       <section class="card" style="margin-bottom:12px">
-        <div class="panel-head"><h2>Mis suscripciones (${data.items.length})</h2>
+        <div class="panel-head"><h2>Personas (${data.profiles.length})</h2></div>
+        <p class="muted">Crea un perfil por persona (por ejemplo, tú, tu pareja o tus hijos) y asígnale sus suscripciones. Un plan compartido entre varias personas se divide en partes iguales en el panel.</p>
+        <div class="people-admin">${data.profiles.map((p, i) => `<div class="person-admin" data-id="${esc(p.profile_id)}">
+            <span class="avatar" style="background:${personColor(i)}">${esc(initials(p.name))}</span>
+            <input aria-label="Nombre" value="${esc(p.name)}" maxlength="60" data-k="name">
+            <input aria-label="Relación" value="${esc(p.relation)}" maxlength="40" data-k="relation" placeholder="Relación (opcional)">
+            <span class="muted small">${plural(stats[p.profile_id]?.count || 0, "suscripción", "suscripciones")} · ${moneyText(stats[p.profile_id]?.monthly)}/mes</span>
+            <button class="btn small" data-act="save" type="button">Guardar</button>
+            <button class="btn small danger" data-act="del" type="button">Eliminar</button>
+          </div>`).join("") || '<p class="muted">Todavía no hay personas.</p>'}</div>
+        <form class="inline-form" id="newPerson" style="margin-top:12px">
+          <div class="field"><label for="np_name">Nombre</label><input id="np_name" name="name" maxlength="60" required placeholder="Ej. Jimmy"></div>
+          <div class="field"><label for="np_rel">Relación <span class="muted">(opcional)</span></label><input id="np_rel" name="relation" maxlength="40" placeholder="Yo, pareja, hija…"></div>
+          <button class="btn primary" type="submit">+ Agregar persona</button>
+        </form>
+      </section>
+      <section class="card" style="margin-bottom:12px">
+        <div class="panel-head"><h2>Suscripciones (${data.items.length})</h2>
           <div class="row"><button class="btn" type="button" id="exportCsv" ${data.items.length ? "" : "disabled"}>Exportar CSV</button>
           <button class="btn primary" type="button" data-add-expense="personal">+ Agregar suscripción</button></div></div>
-        <p class="muted">Edita una suscripción para cambiar su precio o fecha de cobro. Si la cancelas, márcala como inactiva o indica desde cuándo: se conserva en el historial y deja de contar.</p>
-        <div id="personalAdminTable">${expenseTable(data.items, cat)}</div>
+        <p class="muted">Edita una suscripción para cambiar su precio, fecha de cobro o a quién pertenece. Si la cancelas, márcala como inactiva o indica desde cuándo: se conserva en el historial y deja de contar.</p>
+        <div id="personalAdminTable">${expenseTable(data.items, cat, { people: Boolean(data.profiles.length) })}</div>
       </section>
       <section class="card">
         <div class="card-head"><h2>Preferencias</h2></div>
         <form class="inline-form" id="prefsForm">
           <div class="field"><label for="prefCurrency">Moneda predeterminada</label>
             <select id="prefCurrency">${CURRENCIES.map((c) => `<option value="${c}" ${c === prefCurrency() ? "selected" : ""}>${c}</option>`).join("")}</select>
-            <div class="help">Se propone al agregar suscripciones y se usa en la gráfica por categoría. Se guarda en este navegador.</div></div>
+            <div class="help">Se propone al agregar suscripciones y se usa en las gráficas. Se guarda en este navegador.</div></div>
         </form>
       </section>`;
     bindEdit($("personalAdminTable"), data.items, "personal");
     body.querySelector("[data-add-expense]").onclick = () => openExpenseDialog("personal");
     $("prefCurrency").onchange = (e) => { setPrefCurrency(e.target.value); toast(`Moneda predeterminada: ${e.target.value}`); };
     $("exportCsv").onclick = () => exportCsv(data.items, cat);
+    $("newPerson").onsubmit = async (e) => {
+      e.preventDefault();
+      const f = Object.fromEntries(new FormData(e.currentTarget));
+      try { await api("/v1/personal/profiles", { method: "PUT", body: { name: f.name, relation: f.relation } }); toast(`${f.name} agregado`); render(); }
+      catch (err) { toast(err.message, true); }
+    };
+    body.querySelectorAll(".person-admin").forEach((row) => {
+      const id = row.dataset.id;
+      row.querySelector('[data-act="save"]').onclick = async () => {
+        const name = row.querySelector('[data-k="name"]').value; const relation = row.querySelector('[data-k="relation"]').value;
+        try { await api("/v1/personal/profiles", { method: "PUT", body: { profile_id: id, name, relation } }); toast("Persona actualizada"); render(); }
+        catch (err) { toast(err.message, true); }
+      };
+      row.querySelector('[data-act="del"]').onclick = async () => {
+        const name = row.querySelector('[data-k="name"]').value;
+        if (!confirm(`¿Eliminar a ${name}? Sus suscripciones se conservan: pasan a "sin asignar" o quedan solo con las demás personas con quienes las compartía.`)) return;
+        try { const r = await api(`/v1/personal/profiles/${encodeURIComponent(id)}`, { method: "DELETE" }); toast(`${name} eliminado (${r.expenses_updated} suscripciones actualizadas)`); if (RECUR.member.real === id) RECUR.member.real = null; render(); }
+        catch (err) { toast(err.message, true); }
+      };
+    });
   } catch (err) {
     body.innerHTML = `<p class="banner error">No se pudo cargar: ${esc(err.message)}</p>`;
   }
@@ -846,7 +949,16 @@ function setupExpenseDialog() {
   $("expenseDelete").onclick = deleteExpense;
 }
 
+function memberOptions(selected) {
+  if (!RECUR.profiles.length) return '<p class="muted small" style="margin:0">Aún no hay personas. Crea una aquí o en Configuración personal.</p>';
+  return RECUR.profiles.map((p, i) => `<label class="member-option"><input type="checkbox" value="${esc(p.profile_id)}" ${selected.includes(p.profile_id) ? "checked" : ""}>
+    <span class="avatar xs" style="background:${personColor(i)}">${esc(initials(p.name))}</span>${esc(p.name)}</label>`).join("");
+}
+
 async function openExpenseDialog(scope, expense = null, presetService = null) {
+  if (scope === "personal" && !RECUR.profiles.length) {
+    try { RECUR.profiles = (await api("/v1/personal/profiles")).items; } catch { /* se puede crear en el formulario */ }
+  }
   const cat = await recurringCatalog(scope);
   const business = scope === "business";
   RECUR.scope = scope;
@@ -856,6 +968,7 @@ async function openExpenseDialog(scope, expense = null, presetService = null) {
     name: preset && preset.key !== "other" ? preset.name : "", service: preset?.key || "other", category: preset?.category || "otros",
     plan: "", amount: "", currency: prefCurrency(), cycle: preset?.cycle || "monthly", billing_date: todayISO(),
     seats: 1, owner: "", team: "", active: true, start_date: "", end_date: "", notes: "",
+    member_ids: RECUR.member.real && RECUR.member.real !== "sin-asignar" ? [RECUR.member.real] : [],
   };
   const currencies = CURRENCIES.includes(v.currency) ? CURRENCIES : [v.currency, ...CURRENCIES];
   const plans = cat.services.find((s) => s.key === v.service)?.plans || [];
@@ -890,6 +1003,10 @@ async function openExpenseDialog(scope, expense = null, presetService = null) {
       <div class="field"><label for="x_owner">Responsable</label><input id="x_owner" name="owner" maxlength="120" value="${esc(v.owner)}" placeholder="nombre@empresa.com"></div>
       <div class="field"><label for="x_team">Equipo</label><input id="x_team" name="team" maxlength="80" value="${esc(v.team)}"></div>
     </div>` : ""}
+    ${business ? "" : `<fieldset class="field members"><legend>¿De quién es?</legend>
+      <div class="member-options" id="memberOptions">${memberOptions(v.member_ids || [])}</div>
+      <div class="new-member"><input id="x_newMember" maxlength="60" placeholder="Nueva persona (ej. Jimmy)" aria-label="Nueva persona"><button type="button" class="btn small" id="x_addMember">+ Agregar</button></div>
+      <div class="help">Si marcas varias personas, el costo se divide en partes iguales entre ellas.</div></fieldset>`}
     <div class="field"><label for="x_notes">Notas <span class="muted">(opcional)</span></label><textarea id="x_notes" name="notes" maxlength="500" rows="2">${esc(v.notes)}</textarea></div>
     <label class="check"><input type="checkbox" name="active" ${v.active ? "checked" : ""}> Activa</label>
     <p class="result bad" id="expenseError" hidden></p>`;
@@ -902,6 +1019,20 @@ async function openExpenseDialog(scope, expense = null, presetService = null) {
     $("x_cycle").value = s.cycle;
     $("x_plans").innerHTML = (s.plans || []).map((p) => `<option value="${esc(p)}">`).join("");
   };
+  const addMember = $("x_addMember");
+  if (addMember) {
+    addMember.onclick = async () => {
+      const input = $("x_newMember"); const name = input.value.trim();
+      if (!name) { input.focus(); return; }
+      try {
+        const created = await api("/v1/personal/profiles", { method: "PUT", body: { name } });
+        RECUR.profiles = [...RECUR.profiles, created].sort((a, b) => a.name.localeCompare(b.name));
+        const checked = [...document.querySelectorAll('#memberOptions input:checked')].map((c) => c.value);
+        $("memberOptions").innerHTML = memberOptions([...checked, created.profile_id]);
+        input.value = "";
+      } catch (err) { toast(err.message, true); }
+    };
+  }
   $("expenseDialog").showModal();
   (expense ? $("x_amount") : (v.name ? $("x_amount") : $("x_name"))).focus();
 }
@@ -917,7 +1048,9 @@ async function saveExpense(event) {
     expense_id: RECUR.editing?.expense_id ?? null, name: data.name.trim(), service: data.service, category: data.category,
     plan: data.plan.trim(), amount: data.amount, currency: data.currency, cycle: data.cycle, billing_date: data.billing_date,
     start_date: data.start_date || null, end_date: data.end_date || null, notes: data.notes.trim(), active: data.active === "on",
-    ...(RECUR.scope === "business" ? { seats: Number(data.seats || 1), owner: data.owner.trim(), team: data.team.trim() } : {}),
+    ...(RECUR.scope === "business"
+      ? { seats: Number(data.seats || 1), owner: data.owner.trim(), team: data.team.trim() }
+      : { member_ids: [...document.querySelectorAll('#memberOptions input:checked')].map((c) => c.value) }),
   };
   const btn = $("expenseSave"); btn.disabled = true;
   try {

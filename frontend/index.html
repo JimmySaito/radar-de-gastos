@@ -152,13 +152,22 @@
     <section id="personal" hidden>
       <div class="page-head">
         <div>
-          <h1>Mis suscripciones</h1>
+          <h1 id="personalTitle">Mis suscripciones</h1>
           <p class="muted">Todo lo que pagas cada mes: streaming, música, inteligencia artificial, software y más. Solo tú ves esta información.</p>
         </div>
         <div class="row">
-          <button type="button" class="btn primary" data-add-expense="personal">+ Agregar suscripción</button>
+          <nav class="views" aria-label="Conjunto de datos personal">
+            <a href="#/personal" data-pview="real">Mis datos</a>
+            <a href="#/personal/ejemplo" data-pview="ejemplo">Ejemplo</a>
+          </nav>
+          <button type="button" class="btn primary" id="personalAdd" data-add-expense="personal">+ Agregar suscripción</button>
         </div>
       </div>
+      <div class="notice" id="personalDemoNotice" hidden>
+        <strong>Datos de ejemplo.</strong> Un hogar ficticio (Jimmy, María y Sofía) con precios ilustrativos, para que veas cómo funciona. Es solo lectura.
+        <a href="#/personal">Ver mis datos →</a>
+      </div>
+      <div class="person-filter" id="personFilter" role="group" aria-label="Filtrar por persona" hidden></div>
       <div id="personalBody"></div>
     </section>
 

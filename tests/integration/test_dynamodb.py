@@ -242,3 +242,15 @@ def test_recurring_repository_on_dynamodb(dynamodb_table: tuple[Any, str]) -> No
     assert repo.list_expenses("user:ana") == []
     repo.delete_expense("tenant:acme", "slack-1")
     assert repo.list_expenses("tenant:acme") == []
+
+
+def test_profiles_on_dynamodb(dynamodb_table: tuple[Any, str]) -> None:
+    from usage_hub.adapters.dynamodb import DynamoRecurringRepository
+    from usage_hub.domain.recurring import Profile
+
+    repo = DynamoRecurringRepository(*dynamodb_table)
+    repo.put_profile("user:j", Profile(profile_id="maria-1", name="María"))
+    repo.put_profile("user:j", Profile(profile_id="ana-1", name="Ana"))
+    assert [p.name for p in repo.list_profiles("user:j")] == ["Ana", "María"]
+    repo.delete_profile("user:j", "ana-1")
+    assert [p.profile_id for p in repo.list_profiles("user:j")] == ["maria-1"]

@@ -278,3 +278,87 @@ def test_file_repository_survives_restart(tmp_path: Path) -> None:
     again.delete_expense("user:ana", "netflix")
     assert FileRecurringRepository(tmp_path).list_expenses("user:ana") == []
     assert len(FileRecurringRepository(tmp_path).list_expenses("tenant:acme")) == 1
+
+
+# ---------------------------------------------------------------- personas
+def test_split_evenly_sums_exactly() -> None:
+    from usage_hub.domain.recurring import split_evenly
+
+    assert split_evenly(Decimal("100"), 3) == [Decimal("33.34"), Decimal("33.33"), Decimal("33.33")]
+    assert sum(split_evenly(Decimal("59900"), 3)) == Decimal("59900")
+
+
+def test_member_views_match_person_totals_and_add_up() -> None:
+    from usage_hub.domain.recurring import UNASSIGNED, by_member, for_member
+    from usage_hub.services.demo import personal_demo
+
+    _, items = personal_demo(TODAY)
+    people = by_member(items, TODAY)
+    total_cop = summarize(items, TODAY)["monthly_equivalent"]["COP"]
+    assert sum(p["monthly"]["COP"] for p in people.values()) == Decimal(total_cop)
+    for member in ("jimmy", "maria", "sofia"):
+        view = summarize(for_member(items, member), TODAY)["monthly_equivalent"]
+        assert view == {c: str(v) for c, v in sorted(people[member]["monthly"].items())}
+    assert UNASSIGNED not in people
+    netflix = next(e for e in for_member(items, "sofia") if e.service == "netflix")
+    assert netflix.charge == Decimal("19966.66") and netflix.shared
+
+
+def test_unassigned_view() -> None:
+    from usage_hub.domain.recurring import UNASSIGNED, by_member, for_member
+
+    items = [expense(), expense(expense_id="b-1", name="B", member_ids=("ana",))]
+    assert [e.expense_id for e in for_member(items, UNASSIGNED)] == ["netflix"]
+    assert set(by_member(items, TODAY)) == {"ana", UNASSIGNED}
+
+
+def test_profiles_lifecycle_and_assignment() -> None:
+    from usage_hub.services.recurring import ProfileRequest
+
+    repo = InMemoryRecurringRepository()
+    service = RecurringService(repo, lambda: TODAY)
+    jimmy = service.save_profile("user:j", ProfileRequest(name="Jimmy", relation="Yo"))
+    maria = service.save_profile("user:j", ProfileRequest(name="María"))
+    assert maria.profile_id.startswith("maria-")
+    with pytest.raises(InvalidExpenseError, match="ya existe"):
+        service.save_profile("user:j", ProfileRequest(name="jimmy"))
+    renamed = service.save_profile(
+        "user:j", ProfileRequest(profile_id=jimmy.profile_id, name="Jimmy S.")
+    )
+    assert renamed.profile_id == jimmy.profile_id
+
+    members = [jimmy.profile_id, maria.profile_id, jimmy.profile_id]
+    shared = service.save("user:j", Scope.PERSONAL, request(member_ids=members))
+    assert shared.member_ids == (jimmy.profile_id, maria.profile_id)
+    with pytest.raises(InvalidExpenseError, match="desconocidas"):
+        service.save("user:j", Scope.PERSONAL, request(member_ids=["nadie"]))
+
+    mine = service.overview("user:j", jimmy.profile_id)
+    assert mine["summary"]["monthly_equivalent"] == {"COP": "22450.00"}
+    assert mine["items"][0]["full_charge"] == "44900.00"
+    assert [p["name"] for p in service.overview("user:j")["by_member"]] == ["Jimmy S.", "María"]
+    with pytest.raises(ExpenseNotFoundError):
+        service.overview("user:j", "nadie")
+
+    assert service.delete_profile("user:j", jimmy.profile_id) == 1
+    assert repo.list_expenses("user:j")[0].member_ids == (maria.profile_id,)
+    with pytest.raises(ExpenseNotFoundError):
+        service.delete_profile("user:j", jimmy.profile_id)
+    with pytest.raises(InvalidExpenseError, match="obligatorio"):
+        service.save_profile("user:j", ProfileRequest(name="   "))
+
+
+def test_business_ignores_member_ids() -> None:
+    service = RecurringService(InMemoryRecurringRepository(), lambda: TODAY)
+    req = request(name="Slack", service="slack", category="colaboracion", member_ids=["x"])
+    assert service.save("tenant:a", Scope.BUSINESS, req).member_ids == ()
+
+
+def test_file_repository_persists_profiles(tmp_path: Path) -> None:
+    from usage_hub.domain.recurring import Profile
+
+    repo = FileRecurringRepository(tmp_path)
+    repo.put_profile("user:j", Profile(profile_id="jimmy-1", name="Jimmy"))
+    assert [p.name for p in FileRecurringRepository(tmp_path).list_profiles("user:j")] == ["Jimmy"]
+    FileRecurringRepository(tmp_path).delete_profile("user:j", "jimmy-1")
+    assert FileRecurringRepository(tmp_path).list_profiles("user:j") == []

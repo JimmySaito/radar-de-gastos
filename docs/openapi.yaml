@@ -158,9 +158,12 @@ paths:
       responses: { "200": { description: OK } }
   /v1/recurring/{scope}:
     get:
-      summary: Gastos recurrentes con su próximo cobro y el resumen del mes (totales por moneda)
-      description: personal = de la persona del token (privado); business = del tenant (lo leen todos sus miembros).
-      parameters: [{ $ref: "#/components/parameters/scope" }]
+      summary: Gastos recurrentes con su próximo cobro, personas, gasto por persona y el resumen del mes
+      description: personal = de la persona del token (privado; dataset=demo para el hogar de ejemplo); business = del tenant.
+      parameters:
+        - { $ref: "#/components/parameters/scope" }
+        - { $ref: "#/components/parameters/dataset" }
+        - { name: member, in: query, schema: { type: string }, description: "Resumen solo de la parte de esa persona (o sin-asignar)" }
       responses: { "200": { description: OK }, "404": { description: Espacio desconocido } }
     put:
       summary: Crear o editar un gasto recurrente (business requiere el grupo admins)
@@ -170,6 +173,29 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RecurringRequest" }
       responses: { "200": { description: Guardado }, "400": { description: Validación }, "403": { description: Requiere admins (business) } }
+  /v1/personal/profiles:
+    get:
+      summary: Personas del espacio personal (con dataset=demo, las del hogar de ejemplo)
+      parameters: [{ $ref: "#/components/parameters/dataset" }]
+      responses: { "200": { description: OK } }
+    put:
+      summary: Crear o renombrar una persona
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                profile_id: { type: string, description: "Vacío = nueva" }
+                name: { type: string, maxLength: 60, example: Jimmy }
+                relation: { type: string, maxLength: 40, example: Yo }
+      responses: { "200": { description: OK }, "400": { description: Nombre duplicado o vacío } }
+  /v1/personal/profiles/{profile_id}:
+    delete:
+      summary: Eliminar una persona (sus suscripciones se conservan y se le quitan)
+      parameters: [{ name: profile_id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: "Eliminada; incluye expenses_updated" }, "404": { description: No existe } }
   /v1/recurring/{scope}/{expense_id}:
     delete:
       summary: Eliminar un gasto recurrente
@@ -242,6 +268,7 @@ components:
         team: { type: string, description: "Solo business" }
         active: { type: boolean }
         notes: { type: string }
+        member_ids: { type: array, items: { type: string }, description: "Personas (solo personal); varias = compartida" }
     ConnectionRequest:
       type: object
       additionalProperties: false

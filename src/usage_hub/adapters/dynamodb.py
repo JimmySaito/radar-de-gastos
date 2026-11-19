@@ -40,7 +40,7 @@ from usage_hub.domain.models import (
     UsageRecord,
 )
 from usage_hub.domain.ports import WriteOutcome
-from usage_hub.domain.recurring import RecurringExpense
+from usage_hub.domain.recurring import Profile, RecurringExpense
 
 _ser = TypeSerializer()
 _deser = TypeDeserializer()
@@ -360,6 +360,26 @@ class DynamoRecurringRepository:
     def delete_expense(self, owner: str, expense_id: str) -> None:
         self._db.delete_item(
             TableName=self._table, Key=_serialize({"PK": f"O#{owner}#RECUR", "SK": expense_id})
+        )
+
+    def list_profiles(self, owner: str) -> Sequence[Profile]:
+        items = _query_all(self._db, self._table, f"O#{owner}#PEOPLE")
+        return sorted(
+            (Profile.model_validate(i["profile"]) for i in items), key=lambda p: p.name.lower()
+        )
+
+    def put_profile(self, owner: str, profile: Profile) -> None:
+        item = {
+            "PK": f"O#{owner}#PEOPLE",
+            "SK": profile.profile_id,
+            "type": "profile",
+            "profile": profile.model_dump(mode="json"),
+        }
+        self._db.put_item(TableName=self._table, Item=_serialize(item))
+
+    def delete_profile(self, owner: str, profile_id: str) -> None:
+        self._db.delete_item(
+            TableName=self._table, Key=_serialize({"PK": f"O#{owner}#PEOPLE", "SK": profile_id})
         )
 
 

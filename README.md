@@ -84,6 +84,12 @@ UsageHub tiene dos espacios, que se eligen en la barra superior:
 - el próximo cobro, con aviso si faltan 3 días o menos;
 - la proyección anual, un calendario del mes y el gasto por categoría.
 
+**Personas:** crea perfiles (por ejemplo Jimmy, María, Sofía) y asígnale a cada suscripción una o varias
+personas. Lo compartido se divide en partes iguales (las partes suman exactamente el cobro). El panel tiene
+un filtro *Todos · Jimmy · María · Sin asignar* que recalcula todo para la parte de esa persona, y una tarjeta
+**Gasto por persona**. El selector *Mis datos | Ejemplo* muestra un hogar ficticio de solo lectura, con
+fechas siempre cercanas a hoy.
+
 Cada suscripción se guarda en su moneda (USD, COP, MXN, EUR…) y los totales se muestran por moneda, sin
 convertir ni inventar tipos de cambio. Las fechas siguientes se calculan solas desde la fecha de cobro que
 ingresas: un cobro el día 31 cae el último día de los meses más cortos. También se pueden exportar a CSV.
@@ -142,8 +148,8 @@ make check          # ruff + mypy --strict + pytest (unitarias, integración con
 
 | Métrica | Valor |
 |---|---|
-| Pruebas | 120 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
-| Cobertura de ramas | 96,2 % (umbral de CI: 80 %) |
+| Pruebas | 129 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Cobertura de ramas | 96,4 % (umbral de CI: 80 %) |
 | Tipado | `mypy --strict` sin errores |
 | Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
 

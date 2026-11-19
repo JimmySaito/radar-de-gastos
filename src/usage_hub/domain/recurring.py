@@ -13,7 +13,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from enum import StrEnum
 from typing import Annotated, Any
 
@@ -64,11 +64,21 @@ class RecurringExpense(BaseModel):
     start_date: date | None = Field(default=None, description="Suscrita desde: no hay cobros antes")
     end_date: date | None = Field(default=None, description="Cancelada desde esta fecha")
     notes: str = Field(default="", max_length=500)
+    member_ids: tuple[str, ...] = Field(
+        default=(), max_length=20, description="Perfiles (personal)"
+    )
+    # Fracción del costo que se analiza: 1 = completo; 1/n = la parte de una persona en un
+    # gasto compartido entre n. Es interna (vistas por persona), no viene del formulario.
+    share: Decimal = Field(default=Decimal(1), gt=0, le=1)
 
     @property
     def charge(self) -> Decimal:
-        """Monto de cada cobro (precio × usuarios)."""
-        return (self.amount * self.seats).quantize(CENT)
+        """Monto de cada cobro (precio × usuarios × parte analizada)."""
+        return (self.amount * self.seats * self.share).quantize(CENT)
+
+    @property
+    def shared(self) -> bool:
+        return len(self.member_ids) > 1
 
     @property
     def monthly_equivalent(self) -> Decimal:
@@ -190,3 +200,63 @@ def summarize(expenses: Sequence[RecurringExpense], today: date) -> dict[str, An
             for (cat, cur), v in sorted(by_category.items(), key=lambda kv: -kv[1])
         ],
     }
+
+
+# ---------------------------------------------------------------- personas (espacio personal)
+UNASSIGNED = "sin-asignar"
+
+
+class Profile(BaseModel):
+    """Una persona del hogar o del grupo (p. ej. Jimmy, María) a la que se asignan gastos."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    profile_id: ExpenseId
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+    relation: str = Field(default="", max_length=40)
+
+
+def for_member(expenses: Iterable[RecurringExpense], member_id: str) -> list[RecurringExpense]:
+    """Vista de lo que le corresponde a una persona. Un cobro compartido entre n se reparte con
+    ``split_evenly`` (las partes suman exactamente el cobro) y esa parte es la de la persona."""
+    if member_id == UNASSIGNED:
+        return [e for e in expenses if not e.member_ids]
+    view = []
+    for e in expenses:
+        if member_id not in e.member_ids:
+            continue
+        full = (e.amount * e.seats).quantize(CENT)
+        part = split_evenly(full, len(e.member_ids))[e.member_ids.index(member_id)]
+        view.append(e.model_copy(update={"share": part / full}))
+    return view
+
+
+def split_evenly(total: Decimal, parts: int) -> list[Decimal]:
+    """Reparte un monto en partes que suman exactamente el total (los centavos sobrantes
+    van a los primeros): 100 entre 3 = 33,34 + 33,33 + 33,33."""
+    base = (total / parts).quantize(CENT, rounding=ROUND_DOWN)
+    leftover = int((total - base * parts) / CENT)
+    return [base + (CENT if i < leftover else 0) for i in range(parts)]
+
+
+def by_member(expenses: Iterable[RecurringExpense], today: date) -> dict[str, dict[str, Any]]:
+    """Equivalente mensual y cantidad de suscripciones activas por persona (y sin asignar).
+
+    Se calcula con la misma vista que ``for_member``, así la tarjeta por persona y el panel
+    filtrado por esa persona muestran exactamente las mismas cifras."""
+    active = [e for e in expenses if e.active and (e.end_date is None or e.end_date > today)]
+    members = list(dict.fromkeys(m for e in active for m in e.member_ids))
+    if any(not e.member_ids for e in active):
+        members.append(UNASSIGNED)
+    result: dict[str, dict[str, Any]] = {}
+    for m in members:
+        view = for_member(active, m)
+        monthly: defaultdict[str, Decimal] = defaultdict(Decimal)
+        for e in view:
+            monthly[e.currency] += e.monthly_equivalent
+        result[m] = {
+            "count": len(view),
+            "shared": sum(1 for e in view if e.shared),
+            "monthly": monthly,
+        }
+    return result

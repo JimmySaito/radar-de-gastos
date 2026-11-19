@@ -20,7 +20,7 @@ from usage_hub.domain.models import (
     UsageRecord,
 )
 from usage_hub.domain.ports import WriteOutcome
-from usage_hub.domain.recurring import RecurringExpense
+from usage_hub.domain.recurring import Profile, RecurringExpense
 
 
 class InMemoryUsageRepository:
@@ -189,6 +189,7 @@ class InMemoryRecurringRepository:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._items: dict[str, dict[str, RecurringExpense]] = defaultdict(dict)
+        self._profiles: dict[str, dict[str, Profile]] = defaultdict(dict)
 
     def list_expenses(self, owner: str) -> Sequence[RecurringExpense]:
         return sorted(self._items.get(owner, {}).values(), key=lambda e: e.name.lower())
@@ -201,6 +202,19 @@ class InMemoryRecurringRepository:
     def delete_expense(self, owner: str, expense_id: str) -> None:
         with self._lock:
             self._items.get(owner, {}).pop(expense_id, None)
+            self._changed()
+
+    def list_profiles(self, owner: str) -> Sequence[Profile]:
+        return sorted(self._profiles.get(owner, {}).values(), key=lambda p: p.name.lower())
+
+    def put_profile(self, owner: str, profile: Profile) -> None:
+        with self._lock:
+            self._profiles[owner][profile.profile_id] = profile
+            self._changed()
+
+    def delete_profile(self, owner: str, profile_id: str) -> None:
+        with self._lock:
+            self._profiles.get(owner, {}).pop(profile_id, None)
             self._changed()
 
     def _changed(self) -> None:

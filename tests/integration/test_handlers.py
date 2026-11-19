@@ -402,3 +402,51 @@ def test_business_licenses_admin_writes_everyone_reads(memory_env: bootstrap.Con
     assert call(http_event("GET", "/v1/recurring/otro", claims=USER))[0] == 404
     cat = call(http_event("GET", "/v1/recurring/personal/catalog", claims=VIEWER))[1]
     assert any(s["key"] == "netflix" for s in cat["services"])
+
+
+def test_personal_profiles_and_member_filter_via_api(memory_env: bootstrap.Container) -> None:
+    ana = {"sub": "ana", "custom:tenant_id": "acme"}
+    status, me = call(http_event("PUT", "/v1/personal/profiles", claims=ana, body={"name": "Ana"}))
+    assert status == 200
+    kid_body = {"name": "Leo", "relation": "Hijo"}
+    kid = call(http_event("PUT", "/v1/personal/profiles", claims=ana, body=kid_body))[1]
+    body = {
+        "name": "Netflix",
+        "service": "netflix",
+        "category": "streaming",
+        "amount": "40000",
+        "currency": "COP",
+        "billing_date": "2026-11-21",
+        "member_ids": [me["profile_id"], kid["profile_id"]],
+    }
+    assert call(http_event("PUT", "/v1/recurring/personal", claims=ana, body=body))[0] == 200
+    query = {"member": kid["profile_id"]}
+    data = call(http_event("GET", "/v1/recurring/personal", claims=ana, query=query))[1]
+    assert data["summary"]["monthly_equivalent"] == {"COP": "20000.00"}
+    assert data["items"][0]["member_names"] == ["Ana", "Leo"]
+    assert len(call(http_event("GET", "/v1/personal/profiles", claims=ana))[1]["items"]) == 2
+    missing = call(
+        http_event("GET", "/v1/recurring/personal", claims=ana, query={"member": "nadie"})
+    )
+    assert missing[0] == 404
+    path = "/v1/personal/profiles/" + kid["profile_id"]
+    status, deleted = call(http_event("DELETE", path, claims=ana))
+    assert status == 200 and deleted["expenses_updated"] == 1
+    assert call(http_event("GET", "/v1/personal/profiles", claims=VIEWER))[1]["items"] == []
+
+
+def test_personal_demo_is_read_only(memory_env: bootstrap.Container) -> None:
+    demo_q = {"dataset": "demo"}
+    demo = call(http_event("GET", "/v1/recurring/personal", claims=VIEWER, query=demo_q))[1]
+    assert {p["name"] for p in demo["profiles"]} == {"Jimmy", "María", "Sofía"}
+    assert demo["summary"]["next_charge"]["days_left"] >= 0
+    assert demo["summary"]["upcoming"]
+    people = call(http_event("GET", "/v1/personal/profiles", claims=VIEWER, query=demo_q))[1]
+    assert len(people["items"]) == 3
+    call(
+        http_event("PUT", "/v1/personal/profiles", claims=VIEWER, query=demo_q, body={"name": "Yo"})
+    )
+    own = call(http_event("GET", "/v1/personal/profiles", claims=VIEWER))[1]["items"]
+    assert [p["name"] for p in own] == ["Yo"]
+    again = call(http_event("GET", "/v1/recurring/personal", claims=VIEWER, query=demo_q))[1]
+    assert len(again["profiles"]) == 3

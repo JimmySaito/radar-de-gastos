@@ -20,6 +20,7 @@ GET    /v1/recurring/{personal|business}/catalog   servicios comunes y categorí
 GET    /v1/recurring/{personal|business}           gastos recurrentes + resumen del mes
 PUT    /v1/recurring/{personal|business}           crear/editar (business: admins)
 DELETE /v1/recurring/{personal|business}/{id}      eliminar
+GET|PUT /v1/personal/profiles · DELETE …/{id}       personas del espacio personal
 
 ``dataset=demo`` hace que las lecturas usen el tenant de ejemplo (sólo lectura). Las
 escrituras siempre van al tenant del token.
@@ -59,8 +60,10 @@ from usage_hub.services.connections import (
 from usage_hub.services.dashboard import DashboardService, DateRange, InvalidRangeError
 from usage_hub.services.ingestion import chunk_records
 from usage_hub.services.recurring import (
+    DEMO_PERSONAL_OWNER,
     ExpenseNotFoundError,
     InvalidExpenseError,
+    ProfileRequest,
     RecurringRequest,
     RecurringService,
     owner_key,
@@ -423,12 +426,30 @@ def _scope(value: str) -> Scope:
 
 
 def _recurring_owner(scope: Scope, *, write: bool) -> str:
-    """Personal: cada persona gestiona lo suyo. Empresa: todos leen, solo admins escriben."""
+    """Personal: cada persona gestiona lo suyo. Empresa: todos leen, solo admins escriben.
+
+    ``dataset=demo`` en una lectura personal devuelve el hogar de ejemplo (solo lectura)."""
     caller = require_admin() if write and scope is Scope.BUSINESS else current_caller()
+    demo = app.current_event.get_query_string_value("dataset") == "demo"
+    if demo and not write and scope is Scope.PERSONAL:
+        return DEMO_PERSONAL_OWNER
     return owner_key(scope, subject=caller.subject, tenant_id=caller.tenant_id)
 
 
-def _recurring() -> RecurringService:
+def _recurring(owner: str | None = None) -> RecurringService:
+    """El ejemplo personal se genera al vuelo (fechas relativas a hoy) en un repositorio en
+    memoria: siempre está fresco y nunca se escribe en la base de datos."""
+    if owner == DEMO_PERSONAL_OWNER:
+        from usage_hub.adapters.memory import InMemoryRecurringRepository
+        from usage_hub.services.demo import personal_demo
+
+        repo = InMemoryRecurringRepository()
+        profiles, expenses = personal_demo(today_utc())
+        for profile in profiles:
+            repo.put_profile(owner, profile)
+        for expense in expenses:
+            repo.put_expense(owner, expense)
+        return RecurringService(repo, today_utc)
     return RecurringService(container().recurring, today_utc)
 
 
@@ -441,7 +462,8 @@ def get_recurring_catalog(scope: str) -> dict[str, Any]:
 @app.get("/v1/recurring/<scope>")
 def list_recurring(scope: str) -> dict[str, Any]:
     owner = _recurring_owner(_scope(scope), write=False)
-    return _recurring().overview(owner)
+    member = app.current_event.get_query_string_value("member") or None
+    return _recurring(owner).overview(owner, member)
 
 
 @app.put("/v1/recurring/<scope>")
@@ -457,6 +479,27 @@ def delete_recurring(scope: str, expense_id: str) -> dict[str, Any]:
     owner = _recurring_owner(_scope(scope), write=True)
     _recurring().delete(owner, expense_id)
     return {"deleted": expense_id}
+
+
+# ---------------------------------------------------------------- personas (personal)
+@app.get("/v1/personal/profiles")
+def list_profiles() -> dict[str, Any]:
+    owner = _recurring_owner(Scope.PERSONAL, write=False)
+    return {"items": _recurring(owner).overview(owner)["profiles"]}
+
+
+@app.put("/v1/personal/profiles")
+def put_profile() -> dict[str, Any]:
+    owner = _recurring_owner(Scope.PERSONAL, write=True)
+    request: ProfileRequest = _body(ProfileRequest)
+    return _recurring().save_profile(owner, request).model_dump(mode="json")
+
+
+@app.delete("/v1/personal/profiles/<profile_id>")
+def delete_profile(profile_id: str) -> dict[str, Any]:
+    owner = _recurring_owner(Scope.PERSONAL, write=True)
+    updated = _recurring().delete_profile(owner, profile_id)
+    return {"deleted": profile_id, "expenses_updated": updated}
 
 
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_HTTP)

@@ -25,7 +25,7 @@ from usage_hub.domain.models import (
     Provider,
     UsageRecord,
 )
-from usage_hub.domain.recurring import RecurringExpense
+from usage_hub.domain.recurring import Profile, RecurringExpense
 
 
 class WriteOutcome(StrEnum):
@@ -120,6 +120,12 @@ class RecurringRepository(Protocol):
     def put_expense(self, owner: str, expense: RecurringExpense) -> None: ...
 
     def delete_expense(self, owner: str, expense_id: str) -> None: ...
+
+    def list_profiles(self, owner: str) -> Sequence[Profile]: ...
+
+    def put_profile(self, owner: str, profile: Profile) -> None: ...
+
+    def delete_profile(self, owner: str, profile_id: str) -> None: ...
 
 
 class WorkQueue(Protocol):

@@ -32,7 +32,7 @@ from usage_hub.domain.models import (
     PrincipalMapping,
     Provider,
 )
-from usage_hub.domain.recurring import RecurringExpense
+from usage_hub.domain.recurring import Profile, RecurringExpense
 
 
 def default_home() -> Path:
@@ -130,6 +130,10 @@ class FileRecurringRepository(InMemoryRecurringRepository):
             for raw in items:
                 expense = RecurringExpense.model_validate(raw)
                 self._items[owner][expense.expense_id] = expense
+        for owner, items in self._file.load().get("profiles", {}).items():
+            for raw in items:
+                profile = Profile.model_validate(raw)
+                self._profiles[owner][profile.profile_id] = profile
 
     def _changed(self) -> None:
         self._file.save(
@@ -137,6 +141,10 @@ class FileRecurringRepository(InMemoryRecurringRepository):
                 "owners": {
                     owner: [e.model_dump(mode="json") for e in items.values()]
                     for owner, items in self._items.items()
-                }
+                },
+                "profiles": {
+                    owner: [p.model_dump(mode="json") for p in items.values()]
+                    for owner, items in self._profiles.items()
+                },
             }
         )

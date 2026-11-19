@@ -56,6 +56,9 @@ locals {
     "GET /v1/recurring/{scope}",
     "PUT /v1/recurring/{scope}",
     "DELETE /v1/recurring/{scope}/{expense_id}",
+    "GET /v1/personal/profiles",
+    "PUT /v1/personal/profiles",
+    "DELETE /v1/personal/profiles/{profile_id}",
   ]
 }
 
