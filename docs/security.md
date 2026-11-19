@@ -21,7 +21,7 @@
 - La política de la llave delega en IAM y solo abre el servicio de CloudWatch Logs (limitado a los log groups de
   la cuenta) y las alarmas de CloudWatch (que no pueden publicar en un tópico cifrado con `aws/sns`).
 - Logs retenidos **365 días** (funciones y accesos a la API) para auditoría.
-- Frontend: S3 privado + CloudFront OAC; CSP estricta (`script-src 'self' cdnjs`), HSTS, `X-Frame-Options: DENY`;
+- Frontend: S3 privado + CloudFront OAC; CSP estricta (`script-src 'self'`, Chart.js incluido en `frontend/vendor`), HSTS, `X-Frame-Options: DENY`;
   versiones del bucket para revertir un despliegue (las anteriores se borran a los 30 días).
 - Mínimo privilegio: un rol IAM por función con acciones explícitas (ver `infra/terraform/envs/dev/main.tf`).
   EventBridge Scheduler invoca con su rol de ejecución, sin permisos abiertos en las funciones.

@@ -9,13 +9,30 @@ se cobra cada una y cuánto le toca a cada persona del hogar.
 
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-blue)](.github/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.13-blue)
-![Coverage](https://img.shields.io/badge/coverage-95%25-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen)
 ![mypy](https://img.shields.io/badge/mypy-strict-blue)
 ![IaC](https://img.shields.io/badge/IaC-Terraform-7B42BC)
 
 > Prototipo (PoC) del proyecto de Arquitectura de Software, Arquitectura Empresarial y Gobierno de TI.
 > Los artefactos de arquitectura (C4, ADR, escenarios de calidad, TOGAF/COBIT) y el artículo
-> están en el repositorio hermano [`usage-hub-architecture`](../usage-hub-architecture).
+> están en el repositorio hermano [`radar-de-gastos-arquitectura`](../radar-de-gastos-arquitectura).
+
+## Por qué una sola herramienta
+
+El gasto en tecnología llega por muchos canales: consumo por API, licencias, suscripciones con tarjeta y
+reembolsos. Cada proveedor lo muestra en su consola y ninguna consola muestra el total. Juntarlo permite:
+
+- **Ver el total.** Una encuesta de C+R Research (2022) encontró que las personas estiman su gasto mensual en
+  suscripciones en 86 USD, cuando en realidad pagan 219 USD. En las empresas, según Zylo (2026), las áreas de
+  negocio controlan el 81 % del gasto SaaS, fuera de la vista de TI.
+- **Saber de quién es cada gasto.** Cada cobro se asigna a una persona, un equipo o un miembro del hogar, en vez de
+  a una llave técnica o a una tarjeta.
+- **Ver los cobros antes de que lleguen.** El calendario de próximos cobros y los presupuestos con alertas
+  avisan a tiempo.
+- **Encontrar pagos de más.** Licencias sin uso o un mismo servicio pagado dos veces solo se ven al comparar todas
+  las fuentes juntas.
+
+El análisis completo, con sus fuentes, está en la sección 2 del artículo del repositorio de arquitectura.
 
 ## El reto técnico
 
@@ -151,12 +168,21 @@ make check          # ruff + mypy --strict + pytest (unitarias, integración con
 
 | Métrica | Valor |
 |---|---|
-| Pruebas | 129 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
-| Cobertura de ramas | 96,4 % (umbral de CI: 80 %) |
+| Pruebas | 130 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Cobertura (líneas y ramas) | 96,3 % (umbral de CI: 80 %) |
 | Tipado | `mypy --strict` sin errores |
 | Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
 
 ## Despliegue en AWS
+
+En Windows, un solo script empaqueta, despliega con Terraform, carga la vista *Ejemplo* y da de alta al
+administrador:
+
+```powershell
+.\scripts\deploy_aws.ps1 -AdminEmail tu@correo.com -Tenant mi-empresa
+```
+
+En macOS o Linux:
 
 ```bash
 python scripts/build_lambda.py            # dist/app.zip + dist/layer.zip para Lambda arm64
@@ -164,7 +190,8 @@ cd infra/terraform/envs/dev && cp terraform.tfvars.example terraform.tfvars
 terraform init && terraform apply
 ```
 
-Pasos completos (alta de usuarios, conectores, alarmas): [docs/runbook.md](docs/runbook.md).
+Guía paso a paso, costos y plan de respaldo local para presentaciones: [docs/despliegue.md](docs/despliegue.md).
+Operación (alta de usuarios, conectores, alarmas): [docs/runbook.md](docs/runbook.md).
 Modelo de amenazas: [docs/security.md](docs/security.md). Contrato de la API: [docs/openapi.yaml](docs/openapi.yaml).
 
 ## Pruebas de estrés

@@ -2,6 +2,8 @@
 
 ## 1. Despliegue inicial
 
+En Windows basta con `.\scripts\deploy_aws.ps1 -AdminEmail tu@correo.com` (incluye los pasos 2 y 3); ver [despliegue.md](despliegue.md). A mano:
+
 ```bash
 python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
