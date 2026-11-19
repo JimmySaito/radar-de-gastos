@@ -51,8 +51,15 @@ variable "policy_json" {
 }
 
 variable "log_retention_days" {
-  type    = number
-  default = 30
+  description = "Retención de logs. Un año cubre auditorías y cierres contables anuales."
+  type        = number
+  default     = 365
+}
+
+variable "kms_key_arn" {
+  description = "CMK para cifrar el log group y las variables de entorno (la política de la llave debe permitir a CloudWatch Logs)."
+  type        = string
+  default     = null
 }
 
 variable "log_level" {

@@ -61,3 +61,9 @@ variable "enable_deletion_protection" {
   type    = bool
   default = false
 }
+
+variable "log_retention_days" {
+  description = "Retención de los logs de acceso de la API (días)."
+  type        = number
+  default     = 365
+}

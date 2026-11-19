@@ -1,6 +1,6 @@
 #
-# Módulo reutilizable: función Lambda con rol de mínimo privilegio, logs con
-# retención, X-Ray activo y alarma de errores. Graviton (arm64) por costo/rendimiento.
+# Módulo reutilizable: función Lambda con rol de mínimo privilegio, logs cifrados
+# con retención, X-Ray activo y alarma de errores. Graviton (arm64) por costo/rendimiento.
 #
 
 data "aws_iam_policy_document" "assume" {
@@ -39,11 +39,16 @@ resource "aws_iam_role_policy" "inline" {
 resource "aws_cloudwatch_log_group" "this" {
   name              = "/aws/lambda/${var.name}"
   retention_in_days = var.log_retention_days
+  kms_key_id        = var.kms_key_arn
   tags              = var.tags
 }
 
 resource "aws_lambda_function" "this" {
+  # checkov:skip=CKV_AWS_116: la API es síncrona, el colector usa la DLQ de SQS y los horarios reintentan en EventBridge Scheduler
+  # checkov:skip=CKV_AWS_117: solo llama a servicios administrados y APIs públicas; una VPC agregaría NAT (costo fijo) sin reducir riesgo
+  # checkov:skip=CKV_AWS_272: el paquete lo construye y despliega el mismo pipeline; firma de código recomendada en producción
   function_name                  = var.name
+  kms_key_arn                    = var.kms_key_arn
   description                    = var.description
   role                           = aws_iam_role.this.arn
   runtime                        = "python3.13"

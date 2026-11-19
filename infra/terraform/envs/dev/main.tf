@@ -7,7 +7,7 @@ data "aws_region" "current" {}
 
 # ---------------------------------------------------------------- datos
 # Tabla única (single-table design). On-demand: escala con la carga sin planificar
-# capacidad; PITR para recuperación ante borrados; cifrado en reposo con KMS de AWS.
+# capacidad; PITR para recuperación ante borrados; cifrado en reposo con la CMK (kms.tf).
 resource "aws_dynamodb_table" "main" {
   name                        = local.name
   billing_mode                = "PAY_PER_REQUEST"
@@ -29,14 +29,15 @@ resource "aws_dynamodb_table" "main" {
   }
 
   server_side_encryption {
-    enabled = true
+    enabled     = true
+    kms_key_arn = local.kms_key_arn
   }
 }
 
 # ---------------------------------------------------------------- mensajería
 resource "aws_sns_topic" "alerts" {
   name              = "${local.name}-alerts"
-  kms_master_key_id = "alias/aws/sns"
+  kms_master_key_id = local.kms_key_arn
 }
 
 resource "aws_sns_topic_subscription" "email" {
@@ -81,6 +82,7 @@ module "api_fn" {
   memory_mb       = 1024 # más memoria = más CPU = menor latencia p99 en agregaciones
   timeout_seconds = 29   # "Probar conexión" llama al proveedor; límite de integración de HTTP API: 30 s
   alarm_actions   = [aws_sns_topic.alerts.arn]
+  kms_key_arn     = local.kms_key_arn
   environment = merge(local.common_env, {
     AUTH_MODE          = "jwt"
     DEMO_TENANT        = "demo"
@@ -89,6 +91,7 @@ module "api_fn" {
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      local.kms_use_statement,
       {
         Effect   = "Allow"
         Action   = ["dynamodb:Query", "dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem"]
@@ -121,10 +124,12 @@ module "collector_fn" {
   memory_mb       = 1024
   timeout_seconds = 60
   alarm_actions   = [aws_sns_topic.alerts.arn]
+  kms_key_arn     = local.kms_key_arn
   environment     = local.common_env
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      local.kms_use_statement,
       {
         Effect   = "Allow"
         Action   = ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:ConditionCheckItem"] # UpdateItem: estado de sincronización
@@ -164,10 +169,12 @@ module "scheduler_fn" {
   memory_mb       = 256
   timeout_seconds = 30
   alarm_actions   = [aws_sns_topic.alerts.arn]
+  kms_key_arn     = local.kms_key_arn
   environment     = local.common_env
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      local.kms_use_statement,
       { Effect = "Allow", Action = ["dynamodb:Query"], Resource = local.table_arn },
       { Effect = "Allow", Action = ["sqs:SendMessage"], Resource = module.work_queue.queue_arn },
     ]
@@ -184,10 +191,12 @@ module "budget_fn" {
   memory_mb       = 512
   timeout_seconds = 120
   alarm_actions   = [aws_sns_topic.alerts.arn]
+  kms_key_arn     = local.kms_key_arn
   environment     = merge(local.common_env, { ALERT_TOPIC_ARN = aws_sns_topic.alerts.arn })
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      local.kms_use_statement,
       { Effect = "Allow", Action = ["dynamodb:Query", "dynamodb:PutItem"], Resource = local.table_arn },
       { Effect = "Allow", Action = ["sns:Publish"], Resource = aws_sns_topic.alerts.arn },
     ]
@@ -214,17 +223,22 @@ resource "aws_iam_role_policy" "scheduler" {
   role = aws_iam_role.scheduler.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "lambda:InvokeFunction"
-      Resource = [module.scheduler_fn.function_arn, module.budget_fn.function_arn]
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = [module.scheduler_fn.function_arn, module.budget_fn.function_arn]
+      },
+      # Los horarios están cifrados con la CMK.
+      { Effect = "Allow", Action = ["kms:Decrypt"], Resource = local.kms_key_arn },
+    ]
   })
 }
 
 resource "aws_scheduler_schedule" "collect" {
   name                = "${local.name}-collect-hourly"
   schedule_expression = "rate(1 hour)"
+  kms_key_arn         = local.kms_key_arn
   flexible_time_window {
     mode                      = "FLEXIBLE"
     maximum_window_in_minutes = 5
@@ -242,6 +256,7 @@ resource "aws_scheduler_schedule" "budgets" {
   name                         = "${local.name}-budgets-daily"
   schedule_expression          = "cron(0 13 * * ? *)"
   schedule_expression_timezone = "UTC"
+  kms_key_arn                  = local.kms_key_arn
   flexible_time_window {
     mode = "OFF"
   }

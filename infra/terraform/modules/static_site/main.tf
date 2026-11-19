@@ -4,6 +4,10 @@
 #
 
 resource "aws_s3_bucket" "this" {
+  # checkov:skip=CKV_AWS_18: el acceso se registra en CloudFront; el bucket solo lo lee CloudFront por OAC
+  # checkov:skip=CKV_AWS_144: contenido estático reproducible desde Git; replicar entre regiones no aporta recuperación
+  # checkov:skip=CKV_AWS_145: archivos públicos de la SPA, sin datos; SSE-S3 basta y CloudFront no necesita permisos de KMS
+  # checkov:skip=CKV2_AWS_62: nada reacciona a cambios del bucket; lo actualiza solo el despliegue
   bucket_prefix = "${var.name}-"
   force_destroy = var.force_destroy
   tags          = var.tags
@@ -15,6 +19,30 @@ resource "aws_s3_bucket_public_access_block" "this" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# Versiones para revertir un despliegue malo; las anteriores se borran a los 30 días.
+resource "aws_s3_bucket_versioning" "this" {
+  bucket = aws_s3_bucket.this.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  bucket = aws_s3_bucket.this.id
+  rule {
+    id     = "limpiar-versiones"
+    status = "Enabled"
+    filter {}
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+  depends_on = [aws_s3_bucket_versioning.this]
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
@@ -65,6 +93,13 @@ data "aws_cloudfront_cache_policy" "optimized" {
 }
 
 resource "aws_cloudfront_distribution" "this" {
+  # checkov:skip=CKV_AWS_68: WAF tiene costo fijo; el sitio es estático y la API aplica throttling y JWT (ver docs/security.md)
+  # checkov:skip=CKV2_AWS_47: depende de WAF (CKV_AWS_68)
+  # checkov:skip=CKV2_AWS_42: sin dominio propio en el prototipo; usa el certificado de *.cloudfront.net
+  # checkov:skip=CKV_AWS_174: con el certificado por defecto CloudFront no permite fijar TLS 1.2; se resuelve con dominio propio y ACM
+  # checkov:skip=CKV_AWS_86: logs de acceso de CloudFront desactivados por costo; la API registra cada llamada
+  # checkov:skip=CKV_AWS_310: un solo origen S3 regional, con 99,99 % de disponibilidad; failover recomendado en producción
+  # checkov:skip=CKV_AWS_374: el producto no restringe países
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_100"

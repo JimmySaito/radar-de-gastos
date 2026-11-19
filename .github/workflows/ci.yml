@@ -49,7 +49,9 @@ jobs:
         with:
           directory: infra/terraform
           framework: terraform
-          soft_fail: true # informe; las excepciones se justifican en docs/security.md
+          # Bloquea el pipeline: cada excepción se justifica en el recurso (checkov:skip)
+          # y se resume en docs/security.md.
+          soft_fail: false
 
   terraform:
     name: Terraform fmt/validate

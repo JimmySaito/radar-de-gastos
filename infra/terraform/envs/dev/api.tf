@@ -72,6 +72,7 @@ resource "aws_apigatewayv2_route" "protected" {
 }
 
 resource "aws_apigatewayv2_route" "health" {
+  # checkov:skip=CKV_AWS_309: sonda de disponibilidad pública a propósito; no devuelve datos
   api_id    = aws_apigatewayv2_api.http.id
   route_key = "GET /v1/health"
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
@@ -79,7 +80,8 @@ resource "aws_apigatewayv2_route" "health" {
 
 resource "aws_cloudwatch_log_group" "api_access" {
   name              = "/aws/apigateway/${local.name}"
-  retention_in_days = 30
+  retention_in_days = var.log_retention_days # auditoría: quién llamó qué ruta
+  kms_key_id        = local.kms_key_arn
 }
 
 resource "aws_apigatewayv2_stage" "default" {
@@ -115,10 +117,3 @@ resource "aws_lambda_permission" "apigw" {
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/*"
 }
 
-resource "aws_lambda_permission" "scheduler" {
-  for_each      = { scheduler = module.scheduler_fn.function_name, budget = module.budget_fn.function_name }
-  statement_id  = "AllowEventBridgeScheduler"
-  action        = "lambda:InvokeFunction"
-  function_name = each.value
-  principal     = "scheduler.amazonaws.com"
-}
