@@ -95,7 +95,7 @@ class DynamoUsageRepository:
                 self._on_retry(reason)
                 if attempt == self._max_attempts:
                     break
-                self._sleep(random.uniform(0, self._base_delay * 2**attempt))  # noqa: S311
+                self._sleep(random.uniform(0, self._base_delay * 2**attempt))  # noqa: S311 - jitter, no criptográfico  # nosec B311
                 continue
             return WriteOutcome.REVISED if previous else WriteOutcome.CREATED
         raise ConcurrencyError(

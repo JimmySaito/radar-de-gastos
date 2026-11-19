@@ -27,8 +27,9 @@ QueryParams = list[tuple[str, str | int | float | bool | None]]
 _RETRYABLE = {408, 409, 429, 500, 502, 503, 504}
 
 
+# Textos de ayuda para el usuario, no secretos (bandit B105 es un falso positivo).
 _HINTS = {
-    "expired_secret_key": "la llave venció: crea una nueva Admin key.",
+    "expired_secret_key": "la llave venció: crea una nueva Admin key.",  # nosec B105
     "invalid_api_key": "la llave no es válida.",
 }
 

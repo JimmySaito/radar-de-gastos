@@ -57,7 +57,7 @@ class SyntheticConnector:
 
     def fetch(self, tenant_id: str, window: CollectionWindow) -> Iterable[UsageRecord]:
         for day in window.days():
-            rng = random.Random(f"{self._seed}:{tenant_id}:{day.isoformat()}")  # noqa: S311 - no criptográfico
+            rng = random.Random(f"{self._seed}:{tenant_id}:{day.isoformat()}")  # noqa: S311 - datos sintéticos, no criptográfico  # nosec B311
             for member_idx in range(self._members):
                 principal = f"user:dev-{member_idx:03d}"
                 for model, (price_in, price_out) in CATALOG.items():
