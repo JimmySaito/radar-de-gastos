@@ -25,6 +25,7 @@ from usage_hub.domain.models import (
     Provider,
     UsageRecord,
 )
+from usage_hub.domain.recurring import RecurringExpense
 
 
 class WriteOutcome(StrEnum):
@@ -109,6 +110,16 @@ class ConfigRepository(Protocol):
     def put_budget(self, budget: Budget) -> None: ...
 
     def delete_budget(self, tenant_id: str, team: str, provider: Provider | None) -> None: ...
+
+
+class RecurringRepository(Protocol):
+    """Gastos recurrentes por dueño: ``user:{sub}`` (personal) o ``tenant:{id}`` (empresa)."""
+
+    def list_expenses(self, owner: str) -> Sequence[RecurringExpense]: ...
+
+    def put_expense(self, owner: str, expense: RecurringExpense) -> None: ...
+
+    def delete_expense(self, owner: str, expense_id: str) -> None: ...
 
 
 class WorkQueue(Protocol):

@@ -71,6 +71,25 @@ python scripts/local_server.py                       # abrir http://localhost:80
 
 ## Uso
 
+UsageHub tiene dos espacios, que se eligen en la barra superior:
+
+| Espacio | Para qué |
+|---|---|
+| **Empresa** | Consumo de IA y nube de la organización (APIs de Anthropic, OpenAI, AWS, Google, Claude Code) con atribución por persona y equipo, presupuestos, y **licencias SaaS** (Slack, GitHub, Microsoft 365, Claude Team…) con número de usuarios. |
+| **Personal** | **Mis suscripciones**: todo lo que pagas cada mes o cada año, sea IA (ChatGPT, Claude, Gemini) o no (Netflix, HBO Max, Disney+, Spotify, YouTube Premium, iCloud, gimnasio…), con su **fecha de cobro**. Es privado: cada persona ve solo lo suyo. |
+
+**Mis suscripciones** muestra:
+- el gasto mensual equivalente (un plan anual cuenta 1/12 por mes);
+- los cobros del mes y cuánto falta por cobrar;
+- el próximo cobro, con aviso si faltan 3 días o menos;
+- la proyección anual, un calendario del mes y el gasto por categoría.
+
+Cada suscripción se guarda en su moneda (USD, COP, MXN, EUR…) y los totales se muestran por moneda, sin
+convertir ni inventar tipos de cambio. Las fechas siguientes se calculan solas desde la fecha de cobro que
+ingresas: un cobro el día 31 cae el último día de los meses más cortos. También se pueden exportar a CSV.
+
+### Empresa
+
 La aplicación tiene dos vistas, que se eligen arriba a la izquierda:
 
 | Vista | Qué muestra |
@@ -99,7 +118,6 @@ configuración se conserva y los últimos 30 días se resincronizan solos.
 | AWS | Nada en local (usa tu perfil de AWS CLI) u opcionalmente un rol a asumir con External ID |
 | Google | Service account JSON + tabla de la exportación de facturación a BigQuery (`pip install -e ".[gcp]"`) |
 | Claude Code (este equipo) | Nada: lee los registros locales de `~/.claude/projects` (tokens exactos; costo = equivalente en API, estimado) |
-| Suscripción (costo fijo) | Proveedor, plan, tarifa mensual y persona (p. ej. Claude Max, USD 100/mes, Jimmy); se prorratea por día |
 
 ### Consumo con suscripción (claude.ai, Claude Code Pro/Max)
 
@@ -113,8 +131,8 @@ Los planes individuales y Team no tienen API de uso. UsageHub los cubre de dos m
   ```bash
   python scripts/push_claude_code.py --api https://<api> --token "$TOKEN" --user ana@empresa.com --days 7
   ```
-- **Tarifa del plan (claude.ai, ChatGPT, Gemini…):** el conector *Suscripción (costo fijo)* registra el gasto
-  real del plan, prorrateado por día, en las mismas series y presupuestos que el consumo variable.
+- **Tarifa del plan (claude.ai, ChatGPT, Gemini…):** se registra en *Personal → Mis suscripciones* (o, si la paga
+  la empresa, en *Empresa → Configuración → Licencias y suscripciones*).
 
 ## Calidad
 
@@ -124,8 +142,8 @@ make check          # ruff + mypy --strict + pytest (unitarias, integración con
 
 | Métrica | Valor |
 |---|---|
-| Pruebas | 94 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
-| Cobertura de ramas | 95,5 % (umbral de CI: 80 %) |
+| Pruebas | 120 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Cobertura de ramas | 96,2 % (umbral de CI: 80 %) |
 | Tipado | `mypy --strict` sin errores |
 | Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
 

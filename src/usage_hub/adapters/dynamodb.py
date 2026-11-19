@@ -40,6 +40,7 @@ from usage_hub.domain.models import (
     UsageRecord,
 )
 from usage_hub.domain.ports import WriteOutcome
+from usage_hub.domain.recurring import RecurringExpense
 
 _ser = TypeSerializer()
 _deser = TypeDeserializer()
@@ -333,6 +334,33 @@ class DynamoConfigRepository:
                 return False
             raise
         return True
+
+
+class DynamoRecurringRepository:
+    """Gastos recurrentes: PK ``O#{owner}#RECUR`` · SK ``{expense_id}``."""
+
+    def __init__(self, client: Any, table_name: str) -> None:
+        self._db = client
+        self._table = table_name
+
+    def list_expenses(self, owner: str) -> Sequence[RecurringExpense]:
+        items = _query_all(self._db, self._table, f"O#{owner}#RECUR")
+        expenses = [RecurringExpense.model_validate(i["expense"]) for i in items]
+        return sorted(expenses, key=lambda e: e.name.lower())
+
+    def put_expense(self, owner: str, expense: RecurringExpense) -> None:
+        item = {
+            "PK": f"O#{owner}#RECUR",
+            "SK": expense.expense_id,
+            "type": "recurring",
+            "expense": expense.model_dump(mode="json"),
+        }
+        self._db.put_item(TableName=self._table, Item=_serialize(item))
+
+    def delete_expense(self, owner: str, expense_id: str) -> None:
+        self._db.delete_item(
+            TableName=self._table, Key=_serialize({"PK": f"O#{owner}#RECUR", "SK": expense_id})
+        )
 
 
 def _query_all(db: Any, table: str, pk: str, sk_prefix: str | None = None) -> list[dict[str, Any]]:

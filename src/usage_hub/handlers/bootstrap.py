@@ -19,6 +19,7 @@ from usage_hub.domain.ports import (
     AlertPublisher,
     ConfigRepository,
     MappingRepository,
+    RecurringRepository,
     SecretStore,
     UsageRepository,
     WorkQueue,
@@ -59,6 +60,7 @@ class Container:
     secrets: SecretStore
     queue: WorkQueue
     alerts: AlertPublisher
+    recurring: RecurringRepository
 
 
 def today_utc() -> date:
@@ -86,6 +88,7 @@ def _aws_container(settings: Settings) -> Container:
     from usage_hub.adapters.dynamodb import (
         DynamoConfigRepository,
         DynamoMappingRepository,
+        DynamoRecurringRepository,
         DynamoUsageRepository,
     )
 
@@ -101,6 +104,7 @@ def _aws_container(settings: Settings) -> Container:
         secrets=SecretsManagerProvider(boto3.client("secretsmanager", config=cfg)),
         queue=SqsWorkQueue(boto3.client("sqs", config=cfg), settings.queue_url),
         alerts=SnsAlertPublisher(boto3.client("sns", config=cfg), settings.alert_topic_arn),
+        recurring=DynamoRecurringRepository(ddb, settings.table_name),
     )
 
 
@@ -108,6 +112,7 @@ def _memory_container(settings: Settings) -> Container:
     from usage_hub.adapters.localfs import (
         FileConfigRepository,
         FileMappingRepository,
+        FileRecurringRepository,
         FileSecretStore,
         default_home,
     )
@@ -116,6 +121,7 @@ def _memory_container(settings: Settings) -> Container:
         InMemoryConfigRepository,
         InMemoryMappingRepository,
         InMemoryQueue,
+        InMemoryRecurringRepository,
         InMemoryUsageRepository,
         StaticSecrets,
     )
@@ -123,18 +129,21 @@ def _memory_container(settings: Settings) -> Container:
     configs: InMemoryConfigRepository
     mappings: InMemoryMappingRepository
     secrets: StaticSecrets
+    recurring: InMemoryRecurringRepository
     if settings.storage == "local":
         home = default_home()
-        configs, mappings, secrets = (
+        configs, mappings, secrets, recurring = (
             FileConfigRepository(home),
             FileMappingRepository(home),
             FileSecretStore(home),
+            FileRecurringRepository(home),
         )
     else:
-        configs, mappings, secrets = (
+        configs, mappings, secrets, recurring = (
             InMemoryConfigRepository(),
             InMemoryMappingRepository(),
             StaticSecrets(),
+            InMemoryRecurringRepository(),
         )
     return Container(
         settings=settings,
@@ -145,6 +154,7 @@ def _memory_container(settings: Settings) -> Container:
         secrets=secrets,
         queue=InMemoryQueue(),
         alerts=InMemoryAlerts(),
+        recurring=recurring,
     )
 
 

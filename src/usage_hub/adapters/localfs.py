@@ -22,6 +22,7 @@ from typing import Any
 from usage_hub.adapters.memory import (
     InMemoryConfigRepository,
     InMemoryMappingRepository,
+    InMemoryRecurringRepository,
     StaticSecrets,
 )
 from usage_hub.domain.models import (
@@ -31,6 +32,7 @@ from usage_hub.domain.models import (
     PrincipalMapping,
     Provider,
 )
+from usage_hub.domain.recurring import RecurringExpense
 
 
 def default_home() -> Path:
@@ -118,3 +120,23 @@ class FileSecretStore(StaticSecrets):
 
     def _changed(self) -> None:
         self._file.save({"secrets": self._secrets})
+
+
+class FileRecurringRepository(InMemoryRecurringRepository):
+    def __init__(self, home: Path) -> None:
+        super().__init__()
+        self._file = _JsonFile(home / "recurring.json")
+        for owner, items in self._file.load().get("owners", {}).items():
+            for raw in items:
+                expense = RecurringExpense.model_validate(raw)
+                self._items[owner][expense.expense_id] = expense
+
+    def _changed(self) -> None:
+        self._file.save(
+            {
+                "owners": {
+                    owner: [e.model_dump(mode="json") for e in items.values()]
+                    for owner, items in self._items.items()
+                }
+            }
+        )

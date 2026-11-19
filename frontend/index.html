@@ -15,9 +15,19 @@
       <svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       <span>UsageHub</span>
     </div>
-    <nav class="views" aria-label="Conjunto de datos">
-      <a href="#/real" data-view="real">Datos reales</a>
-      <a href="#/ejemplo" data-view="ejemplo">Ejemplo</a>
+    <nav class="spaces" aria-label="Espacio">
+      <a href="#/empresa/real" data-space="empresa">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6M9 10h.01M15 10h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Empresa
+      </a>
+      <a href="#/personal" data-space="personal">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Personal
+      </a>
+    </nav>
+    <nav class="views" id="views" aria-label="Conjunto de datos">
+      <a href="#/empresa/real" data-view="real">Datos reales</a>
+      <a href="#/empresa/ejemplo" data-view="ejemplo">Ejemplo</a>
     </nav>
     <div class="actions">
       <div class="filters" id="filters" role="group" aria-label="Rango de fechas">
@@ -29,7 +39,7 @@
           <option value="team">Por equipo</option>
         </select>
       </div>
-      <a class="icon-btn" href="#/configuracion" id="settingsLink" aria-label="Configuración" title="Configuración">
+      <a class="icon-btn" href="#/empresa/configuracion/conexiones" id="settingsLink" aria-label="Configuración" title="Configuración">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
       </a>
       <button type="button" class="btn ghost" id="logout" hidden>Salir</button>
@@ -43,17 +53,22 @@
     <section id="dashboard" hidden>
       <div class="notice" id="demoNotice" hidden>
         <strong>Datos de ejemplo.</strong> Una organización ficticia para mostrar las capacidades del producto.
-        <a href="#/real">Ver mis datos reales →</a>
+        <a href="#/empresa/real">Ver mis datos reales →</a>
       </div>
 
       <div class="empty" id="emptyState" hidden>
         <h1>Conecta tu primera fuente de consumo</h1>
         <p>Aún no hay datos reales. Agrega tus credenciales de Claude, OpenAI, AWS o Google, o envía consumo de cualquier sistema por API.</p>
         <div class="row">
-          <a class="btn primary" href="#/configuracion/conexiones">Configurar conexiones</a>
-          <a class="btn" href="#/ejemplo">Ver el ejemplo</a>
+          <a class="btn primary" href="#/empresa/configuracion/conexiones">Configurar conexiones</a>
+          <a class="btn" href="#/empresa/ejemplo">Ver el ejemplo</a>
         </div>
       </div>
+
+      <section class="card licenses-strip" id="licensesCard" hidden>
+        <div class="card-head"><h2>Licencias y suscripciones de la empresa</h2><a class="link" href="#/empresa/configuracion/licencias">Administrar</a></div>
+        <div id="licensesSummary"></div>
+      </section>
 
       <div id="dashContent">
         <section class="kpis" aria-label="Indicadores">
@@ -78,7 +93,7 @@
             <table class="data" id="providersTable"><thead><tr><th>Proveedor</th><th class="num">Costo</th><th class="num">Tokens</th><th class="num">%</th></tr></thead><tbody></tbody></table>
           </section>
           <section class="card">
-            <div class="card-head"><h2>Presupuestos del mes</h2><a class="link admin-only" href="#/configuracion/presupuestos" id="budgetsLink">Administrar</a></div>
+            <div class="card-head"><h2>Presupuestos del mes</h2><a class="link admin-only" href="#/empresa/configuracion/presupuestos" id="budgetsLink">Administrar</a></div>
             <table class="data" id="budgetsTable"><thead><tr><th>Equipo</th><th class="num">Gastado</th><th class="num">Límite</th><th>Estado</th></tr></thead><tbody></tbody></table>
           </section>
           <section class="card">
@@ -97,14 +112,16 @@
     <section id="settings" hidden>
       <div class="settings-head">
         <nav class="breadcrumb" aria-label="Ruta de navegación">
-          <a href="#/real" id="crumbView">Datos reales</a>
+          <span>Empresa</span>
+          <span aria-hidden="true">›</span>
+          <a href="#/empresa/real" id="crumbView">Datos reales</a>
           <span aria-hidden="true">›</span>
           <span>Configuración</span>
           <span aria-hidden="true">›</span>
           <span aria-current="page" id="crumbTab">Conexiones</span>
         </nav>
         <div class="settings-title">
-          <a class="btn back" href="#/real" id="backBtn">
+          <a class="btn back" href="#/empresa/real" id="backBtn">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             <span id="backLabel">Volver al dashboard</span>
           </a>
@@ -116,21 +133,73 @@
       </div>
       <div class="settings-layout">
         <nav class="tabs" aria-label="Secciones de configuración">
-          <a href="#/configuracion/conexiones" data-tab="conexiones">Conexiones</a>
-          <a href="#/configuracion/personas" data-tab="personas">Personas y equipos</a>
-          <a href="#/configuracion/presupuestos" data-tab="presupuestos">Presupuestos</a>
-          <a href="#/configuracion/ingesta" data-tab="ingesta">Ingesta por API</a>
+          <a href="#/empresa/configuracion/conexiones" data-tab="conexiones">Conexiones</a>
+          <a href="#/empresa/configuracion/licencias" data-tab="licencias">Licencias y suscripciones</a>
+          <a href="#/empresa/configuracion/personas" data-tab="personas">Personas y equipos</a>
+          <a href="#/empresa/configuracion/presupuestos" data-tab="presupuestos">Presupuestos</a>
+          <a href="#/empresa/configuracion/ingesta" data-tab="ingesta">Ingesta por API</a>
         </nav>
         <div class="tab-body">
           <div data-panel="conexiones"></div>
+          <div data-panel="licencias" hidden></div>
           <div data-panel="personas" hidden></div>
           <div data-panel="presupuestos" hidden></div>
           <div data-panel="ingesta" hidden></div>
         </div>
       </div>
     </section>
+    <!-- ============================================================ PERSONAL -->
+    <section id="personal" hidden>
+      <div class="page-head">
+        <div>
+          <h1>Mis suscripciones</h1>
+          <p class="muted">Todo lo que pagas cada mes: streaming, música, inteligencia artificial, software y más. Solo tú ves esta información.</p>
+        </div>
+        <div class="row">
+          <button type="button" class="btn primary" data-add-expense="personal">+ Agregar suscripción</button>
+        </div>
+      </div>
+      <div id="personalBody"></div>
+    </section>
+
+    <section id="personalSettings" hidden>
+      <div class="settings-head">
+        <nav class="breadcrumb" aria-label="Ruta de navegación">
+          <a href="#/personal">Personal</a>
+          <span aria-hidden="true">›</span>
+          <span aria-current="page">Configuración</span>
+        </nav>
+        <div class="settings-title">
+          <a class="btn back" href="#/personal">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Volver a Mis suscripciones</span>
+          </a>
+          <div>
+            <h1>Configuración personal</h1>
+            <p class="muted">Administra tus suscripciones, sus fechas de cobro y tus preferencias. <kbd>Esc</kbd> para salir.</p>
+          </div>
+        </div>
+      </div>
+      <div id="personalSettingsBody"></div>
+    </section>
   </main>
+
+  <dialog id="expenseDialog" aria-labelledby="expenseDialogTitle">
+    <form method="dialog" id="expenseForm" class="form" novalidate>
+      <div class="dialog-head">
+        <h2 id="expenseDialogTitle">Nueva suscripción</h2>
+        <button type="button" class="icon-btn small" data-close-dialog aria-label="Cerrar">✕</button>
+      </div>
+      <div id="expenseFields"></div>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger" id="expenseDelete" hidden>Eliminar</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close-dialog>Cancelar</button>
+        <button type="submit" class="btn primary" id="expenseSave">Guardar</button>
+      </div>
+    </form>
+  </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <footer>Datos de proveedores con 4–24 h de retraso. Montos antes de créditos e impuestos.</footer>
+  <footer id="footer">Datos de proveedores con 4–24 h de retraso. Montos antes de créditos e impuestos.</footer>
 </body>
 </html>

@@ -173,38 +173,6 @@ CATALOG: dict[Provider, ProviderSpec] = {
             "tarifa fija. Para un equipo, cada persona usa scripts/push_claude_code.py.",
         ),
         ProviderSpec(
-            provider=Provider.SUBSCRIPTION,
-            name="Suscripción (costo fijo)",
-            description="Planes con tarifa mensual: Claude Pro/Max/Team, ChatGPT Plus/Team, "
-            "Gemini, etc. Se prorratea por día.",
-            docs_url="",
-            fields=(
-                FieldSpec(
-                    "vendor",
-                    "Proveedor",
-                    kind="select",
-                    default="anthropic",
-                    choices=(
-                        ("anthropic", "Anthropic (Claude)"),
-                        ("openai", "OpenAI (ChatGPT)"),
-                        ("google", "Google (Gemini)"),
-                        ("aws", "AWS"),
-                        ("custom", "Otro"),
-                    ),
-                ),
-                FieldSpec("plan", "Plan", placeholder="Claude Max"),
-                FieldSpec("monthly_cost", "Tarifa mensual (USD)", kind="number", placeholder="100"),
-                FieldSpec("member", "Persona", placeholder="nombre@empresa.com"),
-                FieldSpec(
-                    "start_date",
-                    "Desde",
-                    kind="date",
-                    required=False,
-                    help="Opcional: fecha de alta del plan.",
-                ),
-            ),
-        ),
-        ProviderSpec(
             provider=Provider.SYNTHETIC,
             name="Generador de prueba",
             description="Datos sintéticos para probar el flujo completo sin credenciales.",

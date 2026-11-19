@@ -1,12 +1,14 @@
 // UsageHub: SPA sin build step. Lee /config.json (generado por Terraform o el servidor local).
-// Rutas: #/real (datos del tenant), #/ejemplo (tenant de demostración, solo lectura),
-//        #/configuracion/{conexiones|personas|presupuestos|ingesta}.
+// Rutas: #/empresa/{real|ejemplo}            dashboard de consumo de la empresa
+//        #/empresa/configuracion/{conexiones|licencias|personas|presupuestos|ingesta}
+//        #/personal                         mis suscripciones (privado por persona)
+//        #/personal/configuracion           administrar suscripciones y preferencias
 // authMode "cognito": OAuth 2.0 Authorization Code + PKCE.  authMode "local": servidor local.
 
 const PROVIDER_ORDER = ["anthropic", "openai", "google", "aws", "claude_code", "custom", "synthetic"];
 const PROVIDER_LABEL = { anthropic: "Anthropic (Claude)", openai: "OpenAI", google: "Google (Gemini)", aws: "AWS", claude_code: "Claude Code (estimado)", custom: "Personalizado", synthetic: "Generador de prueba", subscription: "Suscripción" };
 const state = { days: 30, groupBy: "provider", config: null, me: null, charts: {}, catalog: null, editing: null, lastView: "real" };
-const TAB_LABEL = { conexiones: "Conexiones", personas: "Personas y equipos", presupuestos: "Presupuestos", ingesta: "Ingesta por API" };
+const TAB_LABEL = { conexiones: "Conexiones", licencias: "Licencias y suscripciones", personas: "Personas y equipos", presupuestos: "Presupuestos", ingesta: "Ingesta por API" };
 const VIEW_LABEL = { real: "Datos reales", ejemplo: "Ejemplo" };
 
 const $ = (id) => document.getElementById(id);
@@ -103,39 +105,65 @@ async function api(path, { method = "GET", params = {}, body } = {}) {
 }
 
 // ------------------------------------------------------------------ router
+const LEGACY = { real: "#/empresa/real", ejemplo: "#/empresa/ejemplo", configuracion: "#/empresa/configuracion" };
+
 function route() {
-  const [, section = "real", tab = "conexiones"] = (location.hash || "#/real").split("/");
-  return { section, tab };
+  const parts = (location.hash || "#/empresa/real").split("/").slice(1);
+  if (parts[0] === "personal") return { space: "personal", view: parts[1] === "configuracion" ? "configuracion" : "panel", tab: null };
+  const view = ["real", "ejemplo", "configuracion"].includes(parts[1]) ? parts[1] : "real";
+  return { space: "empresa", view, tab: parts[2] || "conexiones" };
+}
+
+function setCurrent(nodes, isActive) {
+  nodes.forEach((n) => (isActive(n) ? n.setAttribute("aria-current", "page") : n.removeAttribute("aria-current")));
 }
 
 async function render() {
-  const { section, tab } = route();
-  const isSettings = section === "configuracion";
-  const isDemo = section === "ejemplo";
-  document.querySelectorAll("[data-view]").forEach((a) => {
-    const active = !isSettings && a.dataset.view === (isDemo ? "ejemplo" : "real");
-    if (active) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
-  });
-  $("dashboard").hidden = isSettings;
-  $("settings").hidden = !isSettings;
-  $("filters").hidden = isSettings;
-  if (!isSettings) state.lastView = isDemo ? "ejemplo" : "real";
-  const back = `#/${state.lastView}`;
+  // Enlaces anteriores (#/real, #/configuracion/...) siguen funcionando.
+  const first = (location.hash || "").split("/")[1];
+  if (LEGACY[first]) { location.replace(LEGACY[first] + location.hash.slice(2 + first.length)); return; }
+
+  const { space, view, tab } = route();
+  const empresa = space === "empresa";
+  const isSettings = view === "configuracion";
+  const isDemo = view === "ejemplo";
+  setCurrent(document.querySelectorAll("[data-space]"), (a) => a.dataset.space === space);
+  setCurrent(document.querySelectorAll("[data-view]"), (a) => empresa && !isSettings && a.dataset.view === view);
+  $("views").hidden = !empresa;
+  $("filters").hidden = !empresa || isSettings;
+  $("footer").hidden = !empresa;
+  $("dashboard").hidden = !empresa || isSettings;
+  $("settings").hidden = !empresa || !isSettings;
+  $("personal").hidden = empresa || isSettings;
+  $("personalSettings").hidden = empresa || !isSettings;
+  $("banner").hidden = true;
+
+  if (empresa && !isSettings) state.lastView = view;
+  const back = `#/empresa/${state.lastView}`;
   const gear = $("settingsLink");
-  gear.hidden = !state.me?.is_admin;
-  // El engranaje es un interruptor: abre Configuración y, estando dentro, vuelve al dashboard.
-  gear.href = isSettings ? back : `#/configuracion/${state.lastTab || "conexiones"}`;
-  gear.setAttribute("aria-label", isSettings ? "Cerrar configuración" : "Configuración");
+  // El engranaje es un interruptor y depende del espacio: abre su configuración y, estando dentro, vuelve.
+  if (empresa) {
+    gear.hidden = !state.me?.is_admin;
+    gear.href = isSettings ? back : `#/empresa/configuracion/${state.lastTab || "conexiones"}`;
+  } else {
+    gear.hidden = false;
+    gear.href = isSettings ? "#/personal" : "#/personal/configuracion";
+  }
+  gear.setAttribute("aria-label", isSettings ? "Cerrar configuración" : (empresa ? "Configuración de la empresa" : "Configuración personal"));
   gear.title = gear.getAttribute("aria-label");
   if (isSettings) gear.setAttribute("aria-current", "page"); else gear.removeAttribute("aria-current");
+
   $("backBtn").href = back;
   $("crumbView").href = back;
   $("crumbView").textContent = VIEW_LABEL[state.lastView];
   $("backLabel").textContent = `Volver a ${VIEW_LABEL[state.lastView]}`;
-  if (isSettings) { state.lastTab = tab; $("crumbTab").textContent = TAB_LABEL[tab] || tab; }
-  document.title = isSettings ? `${TAB_LABEL[tab] || "Configuración"} · Configuración · UsageHub` : `${VIEW_LABEL[state.lastView]} · UsageHub`;
-  $("banner").hidden = true;
-  if (isSettings) await renderSettings(tab);
+  if (empresa && isSettings) { state.lastTab = tab; $("crumbTab").textContent = TAB_LABEL[tab] || tab; }
+  document.title = !empresa
+    ? `${isSettings ? "Configuración · " : ""}Personal · UsageHub`
+    : isSettings ? `${TAB_LABEL[tab] || "Configuración"} · Empresa · UsageHub` : `${VIEW_LABEL[state.lastView]} · Empresa · UsageHub`;
+
+  if (!empresa) await (isSettings ? renderPersonalSettings() : renderPersonal());
+  else if (isSettings) await renderSettings(tab);
   else await renderDashboard(isDemo);
 }
 
@@ -273,6 +301,7 @@ async function renderDashboard(isDemo) {
     renderKpis(summary); renderProviders(summary); renderBudgets(budgets); renderSeries(ts);
     renderRanking("membersChart", summary.top_members);
     renderRanking("servicesChart", summary.top_services);
+    await renderLicensesCard(isDemo);
   } catch (err) {
     $("banner").hidden = false;
     $("banner").textContent = `No se pudieron cargar los datos: ${err.message}`;
@@ -293,6 +322,7 @@ async function renderSettings(tab) {
   panel.innerHTML = '<p class="muted">Cargando…</p>';
   try {
     if (tab === "conexiones") await renderConnections(panel);
+    else if (tab === "licencias") await renderRecurringAdmin(panel, "business");
     else if (tab === "personas") await renderPeople(panel);
     else if (tab === "presupuestos") await renderBudgetAdmin(panel);
     else if (tab === "ingesta") renderIngest(panel);
@@ -369,7 +399,7 @@ function showProviderPicker(specs) {
   $("connForm").innerHTML = `<section class="card" style="margin-bottom:12px">
     <div class="card-head"><h2>¿Qué quieres conectar?</h2><button class="link" type="button" id="cancelPick">Cancelar</button></div>
     <div class="providers">${specs.map((s) => `<button type="button" class="provider-option" data-provider="${esc(s.provider)}"><strong>${esc(s.name)}</strong><span>${esc(s.description)}</span></button>`).join("")}</div>
-    <p class="muted" style="margin:12px 0 0">¿Otro sistema? Envíalo por API en <a href="#/configuracion/ingesta">Ingesta por API</a>.</p>
+    <p class="muted" style="margin:12px 0 0">¿Otro sistema? Envíalo por API en <a href="#/empresa/configuracion/ingesta">Ingesta por API</a>.</p>
   </section>`;
   $("cancelPick").onclick = () => { $("connForm").innerHTML = ""; };
   $("connForm").querySelectorAll("[data-provider]").forEach((b) => { b.onclick = () => showConnectionForm(specs.find((s) => s.provider === b.dataset.provider)); });
@@ -570,13 +600,347 @@ function renderIngest(panel) {
     <section class="card"><div class="card-head"><h2>Campos</h2></div>
       <table class="data"><thead><tr><th>Campo</th><th>Descripción</th></tr></thead><tbody>
         <tr><td><code>service</code></td><td>Modelo o servicio consumido (obligatorio)</td></tr>
-        <tr><td><code>principal</code></td><td>Quién lo consumió: usuario, API key, proyecto… (obligatorio). Asígnalo a una persona en <a href="#/configuracion/personas">Personas y equipos</a>.</td></tr>
+        <tr><td><code>principal</code></td><td>Quién lo consumió: usuario, API key, proyecto… (obligatorio). Asígnalo a una persona en <a href="#/empresa/configuracion/personas">Personas y equipos</a>.</td></tr>
         <tr><td><code>usage_date</code></td><td>Día del consumo, AAAA-MM-DD (obligatorio)</td></tr>
         <tr><td><code>input_tokens</code>, <code>output_tokens</code>, <code>cached_tokens</code>, <code>requests</code></td><td>Métricas enteras ≥ 0</td></tr>
         <tr><td><code>cost</code></td><td>Costo en USD como texto decimal, p. ej. <code>"12.50"</code></td></tr>
         <tr><td><code>provider</code></td><td>Opcional, por defecto <code>custom</code></td></tr>
       </tbody></table>
       <p class="muted" style="margin-bottom:0">Hasta 1.000 registros por petición. Contrato completo: <code>docs/openapi.yaml</code>.</p></section>`;
+}
+
+// ------------------------------------------------------------------ gastos recurrentes
+// Personal: suscripciones de cada persona (streaming, música, IA, software...).
+// Empresa: licencias SaaS del tenant. Los montos se muestran en su moneda, sin conversión.
+const RECUR = { catalogs: {}, editing: null, scope: "personal" };
+const CURRENCIES = ["USD", "COP", "MXN", "EUR", "ARS", "CLP", "PEN", "BRL", "GBP", "CAD"];
+const ZERO_DECIMALS = new Set(["COP", "CLP", "JPY", "KRW", "PYG"]);
+const CYCLE_LABEL = { weekly: "Semanal", monthly: "Mensual", quarterly: "Trimestral", annual: "Anual" };
+const QUICK_ADD = ["netflix", "spotify", "max", "disney", "youtube", "prime", "chatgpt", "claude", "icloud", "gym"];
+
+function money(amount, currency) {
+  const digits = ZERO_DECIMALS.has(currency) ? 0 : 2;
+  return new Intl.NumberFormat("es", { style: "currency", currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(Number(amount));
+}
+const moneyLines = (byCurrency) => Object.entries(byCurrency || {}).map(([c, v]) => money(v, c));
+const moneyText = (byCurrency) => moneyLines(byCurrency).join(" · ") || money(0, prefCurrency());
+
+function prefCurrency() { try { return localStorage.getItem("uh.currency") || "USD"; } catch { return "USD"; } }
+function setPrefCurrency(c) { try { localStorage.setItem("uh.currency", c); } catch { /* sin almacenamiento */ } }
+const todayISO = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+const dueLabel = (n) => (n === 0 ? "hoy" : n === 1 ? "mañana" : `en ${n} días`);
+const shortDate = (iso, opts = { day: "numeric", month: "short" }) => new Date(`${iso}T12:00:00`).toLocaleDateString("es", opts);
+
+async function recurringCatalog(scope) {
+  RECUR.catalogs[scope] ??= await api(`/v1/recurring/${scope}/catalog`);
+  return RECUR.catalogs[scope];
+}
+const categoryLabel = (cat, key) => cat.categories.find((c) => c.key === key)?.label || key;
+const categoryColor = (cat, key) => seriesColor(Math.max(cat.categories.findIndex((c) => c.key === key), 0));
+
+function chargeItem(c, cat) {
+  return `<li class="charge${c.soon ? " soon" : ""}">
+    <div class="date-badge"><b>${new Date(`${c.date}T12:00:00`).getDate()}</b><span>${shortDate(c.date, { month: "short" })}</span></div>
+    <div class="charge-main"><strong>${esc(c.name)}</strong>
+      <span><span class="swatch" style="background:${categoryColor(cat, c.category)}"></span>${esc(categoryLabel(cat, c.category))}</span></div>
+    <div class="charge-side"><span class="amt">${money(c.amount, c.currency)}</span>
+      <span class="due">${c.soon ? '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1l7 13H1z" fill="var(--status-warning)"/></svg>' : ""}${dueLabel(c.days_left)}</span></div>
+  </li>`;
+}
+
+function calendarGrid(summary, cat) {
+  const start = new Date(`${summary.this_month.from}T12:00:00`);
+  const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+  const lead = (start.getDay() + 6) % 7; // lunes primero
+  const byDay = {};
+  for (const c of summary.this_month.calendar) (byDay[Number(c.date.slice(8, 10))] ??= []).push(c);
+  const today = Number(summary.today.slice(8, 10));
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push('<div class="cal-cell empty" aria-hidden="true"></div>');
+  for (let d = 1; d <= daysInMonth; d++) {
+    const list = byDay[d] || [];
+    const title = list.map((c) => `${c.name}: ${money(c.amount, c.currency)}`).join("\n");
+    cells.push(`<div class="cal-cell${d === today ? " today" : ""}${list.length ? " has" : ""}${d < today ? " past" : ""}" ${title ? `title="${esc(title)}"` : ""}>
+      <span class="cal-day">${d}</span>
+      <span class="cal-dots">${list.slice(0, 4).map((c) => `<i style="background:${categoryColor(cat, c.category)}"></i>`).join("")}</span>
+      ${list.length ? `<span class="sr-only">${esc(title)}</span>` : ""}
+    </div>`);
+  }
+  const month = start.toLocaleDateString("es", { month: "long", year: "numeric" });
+  return `<div class="cal-head"><h2>Calendario de ${esc(month)}</h2></div>
+    <div class="cal-grid" role="grid">${["L", "M", "X", "J", "V", "S", "D"].map((w) => `<div class="cal-week" role="columnheader">${w}</div>`).join("")}${cells.join("")}</div>`;
+}
+
+function categoryChart(id, summary, cat) {
+  const currencies = [...new Set(summary.by_category.map((r) => r.currency))];
+  const currency = currencies.includes(prefCurrency()) ? prefCurrency() : currencies[0];
+  const rows = summary.by_category.filter((r) => r.currency === currency);
+  const opts = baseOptions();
+  draw(id, {
+    type: "bar",
+    data: { labels: rows.map((r) => categoryLabel(cat, r.category)), datasets: [{
+      label: `Equivalente mensual (${currency})`, data: rows.map((r) => Number(r.monthly)),
+      backgroundColor: rows.map((r) => categoryColor(cat, r.category)), borderRadius: 4, borderSkipped: "left", maxBarThickness: 22 }] },
+    options: { ...opts, indexAxis: "y", plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => money(c.parsed.x, currency) } } },
+      scales: { x: { grid: { color: css("--grid") }, ticks: { color: css("--text-muted"), callback: (v) => money(v, currency) }, border: { display: false } },
+                y: { grid: { display: false }, ticks: { color: css("--text-secondary") }, border: { color: css("--border") } } } },
+  });
+  return currencies.length > 1 ? `Mostrando ${currency}. También tienes gastos en ${currencies.filter((c) => c !== currency).join(", ")}.` : "";
+}
+
+function expenseTable(items, cat, { business = false, actions = true } = {}) {
+  if (!items.length) return '<p class="muted">Sin registros todavía.</p>';
+  return `<div class="table-scroll"><table class="data"><thead><tr>
+      <th>Servicio</th><th>Categoría</th><th>Ciclo</th>${business ? '<th class="num">Usuarios</th>' : ""}<th class="num">Cobro</th><th class="num">Equivalente mensual</th><th>Próximo cobro</th>${actions ? "<th></th>" : ""}
+    </tr></thead><tbody>
+    ${items.map((e) => `<tr data-id="${esc(e.expense_id)}" class="${e.active ? "" : "inactive"}">
+      <td><strong>${esc(e.name)}</strong>${e.plan ? ` <span class="muted">· ${esc(e.plan)}</span>` : ""}${e.active ? "" : ' <span class="chip">Cancelada</span>'}${business && e.owner ? `<div class="muted small">${esc(e.owner)}${e.team ? ` · ${esc(e.team)}` : ""}</div>` : ""}</td>
+      <td><span class="swatch" style="background:${categoryColor(cat, e.category)}"></span>${esc(categoryLabel(cat, e.category))}</td>
+      <td>${CYCLE_LABEL[e.cycle]}</td>
+      ${business ? `<td class="num">${e.seats}</td>` : ""}
+      <td class="num">${money(e.charge, e.currency)}</td>
+      <td class="num">${money(e.monthly_equivalent, e.currency)}</td>
+      <td>${e.next_charge ? `${shortDate(e.next_charge)} <span class="muted">(${dueLabel(e.days_left)})</span>` : "—"}</td>
+      ${actions ? '<td class="row-actions"><button class="btn small" data-act="edit" type="button">Editar</button></td>' : ""}
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+function bindEdit(container, items, scope) {
+  container.querySelectorAll('[data-act="edit"]').forEach((b) => {
+    b.onclick = () => openExpenseDialog(scope, items.find((e) => e.expense_id === b.closest("tr").dataset.id));
+  });
+}
+
+async function renderPersonal() {
+  const body = $("personalBody");
+  body.innerHTML = '<p class="muted">Cargando…</p>';
+  try {
+    const [data, cat] = await Promise.all([api("/v1/recurring/personal"), recurringCatalog("personal")]);
+    const { items, summary } = data;
+    if (!items.length) {
+      const quick = cat.services.filter((s) => QUICK_ADD.includes(s.key));
+      body.innerHTML = `<div class="empty">
+        <h1>Lleva el control de tus suscripciones</h1>
+        <p>Agrega lo que pagas cada mes o cada año, con su fecha de cobro, y verás cuánto gastas, qué se cobra pronto y cuánto suma al año.</p>
+        <div class="quick-add">${quick.map((s) => `<button type="button" class="btn" data-quick="${esc(s.key)}">+ ${esc(s.name)}</button>`).join("")}</div>
+        <div class="row"><button type="button" class="btn primary" data-add-expense="personal">Agregar otra suscripción</button></div>
+      </div>`;
+      body.querySelectorAll("[data-quick]").forEach((b) => { b.onclick = () => openExpenseDialog("personal", null, b.dataset.quick); });
+      body.querySelector("[data-add-expense]").onclick = () => openExpenseDialog("personal");
+      return;
+    }
+    const next = summary.next_charge;
+    const multi = (v) => moneyLines(v).map((l) => `<span class="money-line">${l}</span>`).join("") || money(0, prefCurrency());
+    body.innerHTML = `
+      <section class="kpis" aria-label="Resumen">
+        <article class="kpi"><h2>Gasto mensual</h2><p class="value stack-lines">${multi(summary.monthly_equivalent)}</p><p class="sub">${summary.active_count} suscripciones activas · equivalente mensual</p></article>
+        <article class="kpi"><h2>Cobros de este mes</h2><p class="value stack-lines">${multi(summary.this_month.total)}</p><p class="sub">${summary.this_month.charges} cobros · quedan ${moneyText(summary.this_month.remaining)}</p></article>
+        <article class="kpi"><h2>Próximo cobro</h2><p class="value">${next ? esc(next.name) : "—"}</p><p class="sub">${next ? `${money(next.amount, next.currency)} · ${shortDate(next.date)} (${dueLabel(next.days_left)})` : "Sin cobros programados"}</p></article>
+        <article class="kpi"><h2>Proyección anual</h2><p class="value stack-lines">${multi(summary.annual_projection)}</p><p class="sub">si mantienes las suscripciones actuales</p></article>
+      </section>
+      <div class="grid">
+        <section class="card">
+          <div class="card-head"><h2>Próximos cobros (31 días)</h2></div>
+          ${summary.upcoming.length ? `<ul class="charges">${summary.upcoming.slice(0, 8).map((c) => chargeItem(c, cat)).join("")}</ul>` : '<p class="muted">No hay cobros en los próximos 31 días.</p>'}
+        </section>
+        <section class="card">${calendarGrid(summary, cat)}</section>
+        <section class="card wide-2">
+          <div class="card-head"><h2>Gasto mensual por categoría</h2></div>
+          <div class="chart-box short"><canvas id="categoryChart" role="img" aria-label="Gasto mensual por categoría"></canvas></div>
+          <p class="muted small" id="categoryNote"></p>
+        </section>
+        <section class="card wide-2">
+          <div class="card-head"><h2>Todas tus suscripciones (${items.length})</h2><a class="link" href="#/personal/configuracion">Administrar</a></div>
+          <div id="personalTable">${expenseTable(items, cat)}</div>
+        </section>
+      </div>`;
+    $("categoryNote").textContent = categoryChart("categoryChart", summary, cat);
+    bindEdit($("personalTable"), items, "personal");
+  } catch (err) {
+    body.innerHTML = `<p class="banner error">No se pudieron cargar tus suscripciones: ${esc(err.message)}</p>`;
+  }
+}
+
+async function renderPersonalSettings() {
+  const body = $("personalSettingsBody");
+  body.innerHTML = '<p class="muted">Cargando…</p>';
+  try {
+    const [data, cat] = await Promise.all([api("/v1/recurring/personal"), recurringCatalog("personal")]);
+    body.innerHTML = `
+      <section class="card" style="margin-bottom:12px">
+        <div class="panel-head"><h2>Mis suscripciones (${data.items.length})</h2>
+          <div class="row"><button class="btn" type="button" id="exportCsv" ${data.items.length ? "" : "disabled"}>Exportar CSV</button>
+          <button class="btn primary" type="button" data-add-expense="personal">+ Agregar suscripción</button></div></div>
+        <p class="muted">Edita una suscripción para cambiar su precio o fecha de cobro. Si la cancelas, márcala como inactiva o indica desde cuándo: se conserva en el historial y deja de contar.</p>
+        <div id="personalAdminTable">${expenseTable(data.items, cat)}</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Preferencias</h2></div>
+        <form class="inline-form" id="prefsForm">
+          <div class="field"><label for="prefCurrency">Moneda predeterminada</label>
+            <select id="prefCurrency">${CURRENCIES.map((c) => `<option value="${c}" ${c === prefCurrency() ? "selected" : ""}>${c}</option>`).join("")}</select>
+            <div class="help">Se propone al agregar suscripciones y se usa en la gráfica por categoría. Se guarda en este navegador.</div></div>
+        </form>
+      </section>`;
+    bindEdit($("personalAdminTable"), data.items, "personal");
+    body.querySelector("[data-add-expense]").onclick = () => openExpenseDialog("personal");
+    $("prefCurrency").onchange = (e) => { setPrefCurrency(e.target.value); toast(`Moneda predeterminada: ${e.target.value}`); };
+    $("exportCsv").onclick = () => exportCsv(data.items, cat);
+  } catch (err) {
+    body.innerHTML = `<p class="banner error">No se pudo cargar: ${esc(err.message)}</p>`;
+  }
+}
+
+function exportCsv(items, cat) {
+  const head = ["servicio", "plan", "categoria", "ciclo", "monto", "moneda", "equivalente_mensual", "proximo_cobro", "activa"];
+  const quote = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = items.map((e) => [e.name, e.plan, categoryLabel(cat, e.category), CYCLE_LABEL[e.cycle], e.charge, e.currency, e.monthly_equivalent, e.next_charge || "", e.active ? "sí" : "no"].map(quote).join(","));
+  const blob = new Blob([`﻿${[head.join(","), ...lines].join("\n")}`], { type: "text/csv;charset=utf-8" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `suscripciones-${todayISO()}.csv` });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function renderRecurringAdmin(panel, scope) {
+  const [data, cat] = await Promise.all([api(`/v1/recurring/${scope}`), recurringCatalog(scope)]);
+  const s = data.summary;
+  panel.innerHTML = `
+    <div class="panel-head"><h2>Licencias y suscripciones</h2><button class="btn primary" type="button" id="addLicense">+ Agregar licencia</button></div>
+    <p class="muted">Herramientas que la empresa paga por usuario o con tarifa fija (Slack, GitHub, Microsoft 365, Claude Team…). Se suman al gasto mensual de la empresa y avisan de las próximas renovaciones.</p>
+    ${data.items.length ? `<div class="kpis compact">
+      <article class="kpi"><h2>Gasto mensual</h2><p class="value stack-lines">${moneyLines(s.monthly_equivalent).map((l) => `<span class="money-line">${l}</span>`).join("")}</p><p class="sub">${s.active_count} activas</p></article>
+      <article class="kpi"><h2>Proyección anual</h2><p class="value stack-lines">${moneyLines(s.annual_projection).map((l) => `<span class="money-line">${l}</span>`).join("")}</p></article>
+      <article class="kpi"><h2>Próxima renovación</h2><p class="value">${s.next_charge ? esc(s.next_charge.name) : "—"}</p><p class="sub">${s.next_charge ? `${money(s.next_charge.amount, s.next_charge.currency)} · ${shortDate(s.next_charge.date)} (${dueLabel(s.next_charge.days_left)})` : ""}</p></article>
+    </div>` : ""}
+    <section class="card"><div id="licensesTable">${expenseTable(data.items, cat, { business: true })}</div></section>`;
+  $("addLicense").onclick = () => openExpenseDialog(scope);
+  bindEdit($("licensesTable"), data.items, scope);
+}
+
+async function renderLicensesCard(isDemo) {
+  const card = $("licensesCard");
+  if (isDemo) { card.hidden = true; return; }
+  try {
+    const { items, summary } = await api("/v1/recurring/business");
+    card.hidden = !items.length && !state.me?.is_admin;
+    const next = summary.next_charge;
+    $("licensesSummary").innerHTML = items.length
+      ? `<div class="license-summary">
+          <div><span class="muted small">Gasto mensual</span><strong>${moneyText(summary.monthly_equivalent)}</strong></div>
+          <div><span class="muted small">Proyección anual</span><strong>${moneyText(summary.annual_projection)}</strong></div>
+          <div><span class="muted small">Próxima renovación</span><strong>${next ? `${esc(next.name)} · ${shortDate(next.date)}` : "—"}</strong>${next ? `<span class="muted small">${money(next.amount, next.currency)} · ${dueLabel(next.days_left)}</span>` : ""}</div>
+        </div>`
+      : '<p class="muted" style="margin:0">Registra las licencias SaaS de la empresa (Slack, GitHub, Microsoft 365, Claude Team…) para ver su costo mensual junto al consumo.</p>';
+  } catch {
+    card.hidden = true;
+  }
+}
+
+// ---------------- diálogo de alta / edición
+function setupExpenseDialog() {
+  const dialog = $("expenseDialog");
+  dialog.querySelectorAll("[data-close-dialog]").forEach((b) => { b.onclick = () => dialog.close(); });
+  dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); }); // clic fuera del cuadro
+  document.querySelectorAll("[data-add-expense]").forEach((b) => { b.onclick = () => openExpenseDialog(b.dataset.addExpense); });
+  $("expenseForm").onsubmit = saveExpense;
+  $("expenseDelete").onclick = deleteExpense;
+}
+
+async function openExpenseDialog(scope, expense = null, presetService = null) {
+  const cat = await recurringCatalog(scope);
+  const business = scope === "business";
+  RECUR.scope = scope;
+  RECUR.editing = expense;
+  const preset = cat.services.find((s) => s.key === (expense?.service || presetService)) || null;
+  const v = expense || {
+    name: preset && preset.key !== "other" ? preset.name : "", service: preset?.key || "other", category: preset?.category || "otros",
+    plan: "", amount: "", currency: prefCurrency(), cycle: preset?.cycle || "monthly", billing_date: todayISO(),
+    seats: 1, owner: "", team: "", active: true, start_date: "", end_date: "", notes: "",
+  };
+  const currencies = CURRENCIES.includes(v.currency) ? CURRENCIES : [v.currency, ...CURRENCIES];
+  const plans = cat.services.find((s) => s.key === v.service)?.plans || [];
+  $("expenseDialogTitle").textContent = expense ? `Editar ${expense.name}` : (business ? "Nueva licencia" : "Nueva suscripción");
+  $("expenseDelete").hidden = !expense;
+  $("expenseFields").innerHTML = `
+    <div class="fields-2">
+      <div class="field"><label for="x_service">Servicio</label>
+        <select id="x_service" name="service">${cat.services.map((s) => `<option value="${esc(s.key)}" ${s.key === v.service ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select></div>
+      <div class="field"><label for="x_name">Nombre</label><input id="x_name" name="name" required maxlength="120" value="${esc(v.name)}" placeholder="Ej. Netflix"></div>
+    </div>
+    <div class="fields-2">
+      <div class="field"><label for="x_plan">Plan <span class="muted">(opcional)</span></label><input id="x_plan" name="plan" list="x_plans" maxlength="120" value="${esc(v.plan)}"><datalist id="x_plans">${plans.map((p) => `<option value="${esc(p)}">`).join("")}</datalist></div>
+      <div class="field"><label for="x_category">Categoría</label>
+        <select id="x_category" name="category">${cat.categories.map((c) => `<option value="${esc(c.key)}" ${c.key === v.category ? "selected" : ""}>${esc(c.label)}</option>`).join("")}</select></div>
+    </div>
+    <div class="fields-3">
+      <div class="field"><label for="x_amount">${business ? "Precio por usuario" : "Costo"}</label><input id="x_amount" name="amount" type="number" inputmode="decimal" min="0.01" step="0.01" required value="${esc(v.amount)}"></div>
+      <div class="field"><label for="x_currency">Moneda</label><select id="x_currency" name="currency">${currencies.map((c) => `<option ${c === v.currency ? "selected" : ""}>${c}</option>`).join("")}</select></div>
+      <div class="field"><label for="x_cycle">Se cobra</label><select id="x_cycle" name="cycle">${cat.cycles.map((c) => `<option value="${c.key}" ${c.key === v.cycle ? "selected" : ""}>${c.label}</option>`).join("")}</select></div>
+    </div>
+    <div class="fields-3">
+      <div class="field"><label for="x_billing">Fecha de cobro</label><input id="x_billing" name="billing_date" type="date" required value="${esc(v.billing_date)}">
+        <div class="help">La próxima (o la última). Las demás se calculan solas.</div></div>
+      <div class="field"><label for="x_start">Suscrita desde <span class="muted">(opcional)</span></label><input id="x_start" name="start_date" type="date" value="${esc(v.start_date || "")}">
+        <div class="help">Vacío = ya estaba activa antes.</div></div>
+      <div class="field"><label for="x_end">Cancelada desde <span class="muted">(opcional)</span></label><input id="x_end" name="end_date" type="date" value="${esc(v.end_date || "")}">
+        <div class="help">Deja de contar desde esa fecha.</div></div>
+    </div>
+    ${business ? `<div class="fields-3">
+      <div class="field"><label for="x_seats">Usuarios / licencias</label><input id="x_seats" name="seats" type="number" min="1" step="1" value="${esc(v.seats)}"></div>
+      <div class="field"><label for="x_owner">Responsable</label><input id="x_owner" name="owner" maxlength="120" value="${esc(v.owner)}" placeholder="nombre@empresa.com"></div>
+      <div class="field"><label for="x_team">Equipo</label><input id="x_team" name="team" maxlength="80" value="${esc(v.team)}"></div>
+    </div>` : ""}
+    <div class="field"><label for="x_notes">Notas <span class="muted">(opcional)</span></label><textarea id="x_notes" name="notes" maxlength="500" rows="2">${esc(v.notes)}</textarea></div>
+    <label class="check"><input type="checkbox" name="active" ${v.active ? "checked" : ""}> Activa</label>
+    <p class="result bad" id="expenseError" hidden></p>`;
+  const service = $("x_service");
+  service.onchange = () => {
+    const s = cat.services.find((x) => x.key === service.value);
+    const name = $("x_name");
+    if (!name.value || cat.services.some((x) => x.name === name.value)) name.value = s.key === "other" ? "" : s.name;
+    $("x_category").value = s.category;
+    $("x_cycle").value = s.cycle;
+    $("x_plans").innerHTML = (s.plans || []).map((p) => `<option value="${esc(p)}">`).join("");
+  };
+  $("expenseDialog").showModal();
+  (expense ? $("x_amount") : (v.name ? $("x_amount") : $("x_name"))).focus();
+}
+
+async function saveExpense(event) {
+  event.preventDefault();
+  const form = $("expenseForm");
+  const err = $("expenseError");
+  err.hidden = true;
+  if (!form.reportValidity()) return;
+  const data = Object.fromEntries(new FormData(form));
+  const body = {
+    expense_id: RECUR.editing?.expense_id ?? null, name: data.name.trim(), service: data.service, category: data.category,
+    plan: data.plan.trim(), amount: data.amount, currency: data.currency, cycle: data.cycle, billing_date: data.billing_date,
+    start_date: data.start_date || null, end_date: data.end_date || null, notes: data.notes.trim(), active: data.active === "on",
+    ...(RECUR.scope === "business" ? { seats: Number(data.seats || 1), owner: data.owner.trim(), team: data.team.trim() } : {}),
+  };
+  const btn = $("expenseSave"); btn.disabled = true;
+  try {
+    await api(`/v1/recurring/${RECUR.scope}`, { method: "PUT", body });
+    if (RECUR.scope === "personal") setPrefCurrency(body.currency);
+    $("expenseDialog").close();
+    toast(RECUR.editing ? "Cambios guardados" : `${body.name} agregada`);
+    render();
+  } catch (e) {
+    err.textContent = e.message; err.hidden = false;
+  }
+  btn.disabled = false;
+}
+
+async function deleteExpense() {
+  const e = RECUR.editing;
+  if (!e || !confirm(`¿Eliminar "${e.name}"? Si solo la cancelaste, es mejor marcarla como inactiva para conservar el historial.`)) return;
+  try {
+    await api(`/v1/recurring/${RECUR.scope}/${encodeURIComponent(e.expense_id)}`, { method: "DELETE" });
+    $("expenseDialog").close();
+    toast(`${e.name} eliminada`);
+    render();
+  } catch (err) { toast(err.message, true); }
 }
 
 // Redibuja las gráficas cuando cambia la densidad de píxeles (zoom del navegador, mover la
@@ -598,11 +962,12 @@ function watchPixelRatio() {
 
 // Esc: primero cierra un formulario abierto; si no hay ninguno, sale de Configuración.
 function onEscape(event) {
-  if (event.key !== "Escape" || route().section !== "configuracion") return;
+  const r = route();
+  if (event.key !== "Escape" || r.view !== "configuracion" || $("expenseDialog").open) return;
   const form = $("connForm");
   if (form && form.innerHTML.trim()) { form.innerHTML = ""; return; }
   if (event.target.closest?.("input, textarea, select")) { event.target.blur(); return; }
-  location.hash = `#/${state.lastView}`;
+  location.hash = r.space === "personal" ? "#/personal" : `#/empresa/${state.lastView}`;
 }
 
 // ------------------------------------------------------------------ arranque
@@ -610,7 +975,8 @@ async function main() {
   state.config = await fetch("/config.json").then((r) => r.json()).catch(() => ({ apiBaseUrl: "", authMode: "local", tenant: "local" }));
   try { state.me = await api("/v1/me"); }
   catch (err) { $("banner").hidden = false; $("banner").textContent = `No se pudo conectar con la API: ${err.message}`; return; }
-  if (!location.hash) history.replaceState(null, "", "#/real");
+  if (!location.hash) history.replaceState(null, "", "#/empresa/real");
+  setupExpenseDialog();
   document.querySelectorAll("[data-days]").forEach((btn) => btn.addEventListener("click", () => {
     document.querySelectorAll("[data-days]").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
     state.days = Number(btn.dataset.days); render();

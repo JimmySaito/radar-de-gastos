@@ -20,6 +20,7 @@ from usage_hub.domain.models import (
     UsageRecord,
 )
 from usage_hub.domain.ports import WriteOutcome
+from usage_hub.domain.recurring import RecurringExpense
 
 
 class InMemoryUsageRepository:
@@ -178,6 +179,28 @@ class StaticSecrets:
     def delete_secret(self, secret_ref: str) -> None:
         with self._lock:
             self._secrets.pop(secret_ref, None)
+            self._changed()
+
+    def _changed(self) -> None:
+        """Gancho para adaptadores con persistencia (ver ``adapters.localfs``)."""
+
+
+class InMemoryRecurringRepository:
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._items: dict[str, dict[str, RecurringExpense]] = defaultdict(dict)
+
+    def list_expenses(self, owner: str) -> Sequence[RecurringExpense]:
+        return sorted(self._items.get(owner, {}).values(), key=lambda e: e.name.lower())
+
+    def put_expense(self, owner: str, expense: RecurringExpense) -> None:
+        with self._lock:
+            self._items[owner][expense.expense_id] = expense
+            self._changed()
+
+    def delete_expense(self, owner: str, expense_id: str) -> None:
+        with self._lock:
+            self._items.get(owner, {}).pop(expense_id, None)
             self._changed()
 
     def _changed(self) -> None:

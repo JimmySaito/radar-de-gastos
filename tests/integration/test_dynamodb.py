@@ -223,3 +223,22 @@ def test_settings_operations_on_dynamodb(dynamodb_table: tuple[Any, str]) -> Non
     )
     mappings.delete_mapping("acme", Provider.AWS, "tag:x")
     assert mappings.list_mappings("acme") == []
+
+
+def test_recurring_repository_on_dynamodb(dynamodb_table: tuple[Any, str]) -> None:
+    from usage_hub.adapters.dynamodb import DynamoRecurringRepository
+    from usage_hub.domain.recurring import RecurringExpense
+
+    repo = DynamoRecurringRepository(*dynamodb_table)
+    e = RecurringExpense(
+        expense_id="slack-1",
+        name="Slack",
+        amount=Decimal("8.75"),
+        seats=3,
+        billing_date=date(2026, 11, 25),
+    )
+    repo.put_expense("tenant:acme", e)
+    assert repo.list_expenses("tenant:acme") == [e]
+    assert repo.list_expenses("user:ana") == []
+    repo.delete_expense("tenant:acme", "slack-1")
+    assert repo.list_expenses("tenant:acme") == []

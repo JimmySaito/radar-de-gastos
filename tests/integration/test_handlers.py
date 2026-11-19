@@ -352,3 +352,53 @@ def test_collector_reports_partial_failures(memory_env: bootstrap.Container) -> 
     result = drain(memory_env)
     # Sólo los mensajes fallidos vuelven a la cola; el válido se confirma.
     assert [f["itemIdentifier"] for f in result["batchItemFailures"]] == ["0", "2"]
+
+
+def test_personal_subscriptions_are_private_per_person(memory_env: bootstrap.Container) -> None:
+    ana = {"sub": "ana", "custom:tenant_id": "acme"}
+    luis = {"sub": "luis", "custom:tenant_id": "acme"}
+    body = {
+        "name": "Netflix",
+        "service": "netflix",
+        "category": "streaming",
+        "amount": "44900",
+        "currency": "COP",
+        "billing_date": "2026-11-21",
+    }
+    status, saved = call(http_event("PUT", "/v1/recurring/personal", claims=ana, body=body))
+    assert status == 200 and saved["seats"] == 1
+    assert len(call(http_event("GET", "/v1/recurring/personal", claims=ana))[1]["items"]) == 1
+    assert call(http_event("GET", "/v1/recurring/personal", claims=luis))[1]["items"] == []
+    # Luis no puede borrar lo de Ana: para él ese id no existe.
+    assert (
+        call(http_event("DELETE", f"/v1/recurring/personal/{saved['expense_id']}", claims=luis))[0]
+        == 404
+    )
+    assert (
+        call(http_event("DELETE", f"/v1/recurring/personal/{saved['expense_id']}", claims=ana))[0]
+        == 200
+    )
+
+
+def test_business_licenses_admin_writes_everyone_reads(memory_env: bootstrap.Container) -> None:
+    body = {
+        "name": "Slack",
+        "service": "slack",
+        "category": "colaboracion",
+        "amount": "8.75",
+        "billing_date": "2026-11-25",
+        "seats": 12,
+    }
+    assert call(http_event("PUT", "/v1/recurring/business", claims=VIEWER, body=body))[0] == 403
+    assert call(http_event("PUT", "/v1/recurring/business", claims=USER, body=body))[0] == 200
+    data = call(http_event("GET", "/v1/recurring/business", claims=VIEWER))[1]
+    assert data["summary"]["monthly_equivalent"] == {"USD": "105.00"}
+    status, error = call(
+        http_event(
+            "PUT", "/v1/recurring/business", claims=USER, body={**body, "category": "streaming"}
+        )
+    )
+    assert status == 400 and "categoría" in error["message"]
+    assert call(http_event("GET", "/v1/recurring/otro", claims=USER))[0] == 404
+    cat = call(http_event("GET", "/v1/recurring/personal/catalog", claims=VIEWER))[1]
+    assert any(s["key"] == "netflix" for s in cat["services"])

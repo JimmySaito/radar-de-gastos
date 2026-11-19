@@ -87,7 +87,6 @@ def test_catalog_covers_configurable_providers() -> None:
         Provider.AWS,
         Provider.GOOGLE,
         Provider.CLAUDE_CODE,
-        Provider.SUBSCRIPTION,
         Provider.SYNTHETIC,
     }
     assert [f.name for f in spec_for(Provider.GOOGLE).secret_fields] == ["service_account_json"]

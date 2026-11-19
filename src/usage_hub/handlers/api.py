@@ -16,6 +16,10 @@ POST   /v1/connectors/{id}/sync?days=N     sincronizar ahora → 202            
 DELETE /v1/connectors/{id}                 eliminar conexión y su secreto            [admins]
 GET|PUT|DELETE /v1/mappings                principal → persona/equipo   [escritura: admins]
 GET|PUT|DELETE /v1/budgets                 presupuestos mensuales       [escritura: admins]
+GET    /v1/recurring/{personal|business}/catalog   servicios comunes y categorías
+GET    /v1/recurring/{personal|business}           gastos recurrentes + resumen del mes
+PUT    /v1/recurring/{personal|business}           crear/editar (business: admins)
+DELETE /v1/recurring/{personal|business}/{id}      eliminar
 
 ``dataset=demo`` hace que las lecturas usen el tenant de ejemplo (sólo lectura). Las
 escrituras siempre van al tenant del token.
@@ -32,6 +36,7 @@ from aws_lambda_powertools.event_handler import APIGatewayHttpResolver, CORSConf
 from aws_lambda_powertools.event_handler.exceptions import (
     BadRequestError,
     ForbiddenError,
+    NotFoundError,
     UnauthorizedError,
 )
 from aws_lambda_powertools.logging import correlation_paths
@@ -42,6 +47,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from usage_hub.connectors.catalog import CATALOG, InvalidConfigurationError
 from usage_hub.domain.ledger import Dimension
 from usage_hub.domain.models import Budget, Identifier, PrincipalMapping, Provider, UsageRecord
+from usage_hub.domain.recurring import Scope
+from usage_hub.domain.recurring_catalog import catalog as recurring_catalog
 from usage_hub.handlers.bootstrap import container, today_utc
 from usage_hub.services.budgets import BudgetEvaluator
 from usage_hub.services.connections import (
@@ -51,6 +58,13 @@ from usage_hub.services.connections import (
 )
 from usage_hub.services.dashboard import DashboardService, DateRange, InvalidRangeError
 from usage_hub.services.ingestion import chunk_records
+from usage_hub.services.recurring import (
+    ExpenseNotFoundError,
+    InvalidExpenseError,
+    RecurringRequest,
+    RecurringService,
+    owner_key,
+)
 
 logger = Logger(service="usagehub-api")
 tracer = Tracer(service="usagehub-api")
@@ -165,6 +179,16 @@ def _invalid_config(exc: InvalidConfigurationError) -> Response[Any]:
 
 @app.exception_handler(ConnectionNotFoundError)  # type: ignore[untyped-decorator]
 def _not_found(exc: ConnectionNotFoundError) -> Response[Any]:
+    return Response(404, "application/json", {"statusCode": 404, "message": str(exc)})
+
+
+@app.exception_handler(InvalidExpenseError)  # type: ignore[untyped-decorator]
+def _invalid_expense(exc: InvalidExpenseError) -> Response[Any]:
+    return Response(400, "application/json", {"statusCode": 400, "message": str(exc)})
+
+
+@app.exception_handler(ExpenseNotFoundError)  # type: ignore[untyped-decorator]
+def _expense_not_found(exc: ExpenseNotFoundError) -> Response[Any]:
     return Response(404, "application/json", {"statusCode": 404, "message": str(exc)})
 
 
@@ -388,6 +412,51 @@ def delete_budget() -> dict[str, Any]:
         caller.tenant_id, team, _provider(app.current_event.get_query_string_value("provider"))
     )
     return {"deleted": team}
+
+
+# ---------------------------------------------------------------- gastos recurrentes
+def _scope(value: str) -> Scope:
+    try:
+        return Scope(value)
+    except ValueError as exc:
+        raise NotFoundError("el espacio debe ser personal o business") from exc
+
+
+def _recurring_owner(scope: Scope, *, write: bool) -> str:
+    """Personal: cada persona gestiona lo suyo. Empresa: todos leen, solo admins escriben."""
+    caller = require_admin() if write and scope is Scope.BUSINESS else current_caller()
+    return owner_key(scope, subject=caller.subject, tenant_id=caller.tenant_id)
+
+
+def _recurring() -> RecurringService:
+    return RecurringService(container().recurring, today_utc)
+
+
+@app.get("/v1/recurring/<scope>/catalog")
+def get_recurring_catalog(scope: str) -> dict[str, Any]:
+    current_caller()
+    return recurring_catalog(_scope(scope))
+
+
+@app.get("/v1/recurring/<scope>")
+def list_recurring(scope: str) -> dict[str, Any]:
+    owner = _recurring_owner(_scope(scope), write=False)
+    return _recurring().overview(owner)
+
+
+@app.put("/v1/recurring/<scope>")
+def put_recurring(scope: str) -> dict[str, Any]:
+    space = _scope(scope)
+    owner = _recurring_owner(space, write=True)
+    request: RecurringRequest = _body(RecurringRequest)
+    return _recurring().save(owner, space, request).model_dump(mode="json")
+
+
+@app.delete("/v1/recurring/<scope>/<expense_id>")
+def delete_recurring(scope: str, expense_id: str) -> dict[str, Any]:
+    owner = _recurring_owner(_scope(scope), write=True)
+    _recurring().delete(owner, expense_id)
+    return {"deleted": expense_id}
 
 
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_HTTP)

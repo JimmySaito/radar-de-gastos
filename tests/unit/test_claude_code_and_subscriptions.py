@@ -144,13 +144,28 @@ def test_subscription_rejects_bad_values() -> None:
         build_connector(zero, {})
 
 
-def test_catalog_validates_select_and_number_fields() -> None:
-    ok = {"vendor": "openai", "plan": "ChatGPT Team", "monthly_cost": "30", "member": "ana"}
-    _, options = split_values(Provider.SUBSCRIPTION, ok)
-    assert options["vendor"] == "openai"
+def test_catalog_validates_select_and_number_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    from usage_hub.connectors import catalog as cat
+
+    spec = cat.ProviderSpec(
+        provider=Provider.CUSTOM,
+        name="Prueba",
+        description="",
+        docs_url="",
+        fields=(
+            cat.FieldSpec("tier", "Nivel", kind="select", choices=(("a", "A"), ("b", "B"))),
+            cat.FieldSpec("price", "Precio", kind="number"),
+        ),
+    )
+    monkeypatch.setitem(cat.CATALOG, Provider.CUSTOM, spec)
+    assert split_values(Provider.CUSTOM, {"tier": "b", "price": "3,5"})[1] == {
+        "tier": "b",
+        "price": "3,5",
+    }
     with pytest.raises(InvalidConfigurationError, match="no válido"):
-        split_values(Provider.SUBSCRIPTION, {**ok, "vendor": "netflix"})
+        split_values(Provider.CUSTOM, {"tier": "z", "price": "1"})
     with pytest.raises(InvalidConfigurationError, match="número"):
-        split_values(Provider.SUBSCRIPTION, {**ok, "monthly_cost": "treinta"})
+        split_values(Provider.CUSTOM, {"tier": "a", "price": "tres"})
     _, cc = split_values(Provider.CLAUDE_CODE, {})
     assert cc == {"path": "~/.claude"}
+    assert Provider.SUBSCRIPTION not in cat.CATALOG  # ahora vive en Licencias y suscripciones

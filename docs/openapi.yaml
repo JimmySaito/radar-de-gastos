@@ -151,6 +151,32 @@ paths:
                 provider: { $ref: "#/components/schemas/Provider" }
                 monthly_limit: { type: string, example: "1500.00" }
       responses: { "200": { description: OK } }
+  /v1/recurring/{scope}/catalog:
+    get:
+      summary: Servicios comunes (Netflix, Spotify, Slack…), categorías y ciclos de cobro para el formulario
+      parameters: [{ $ref: "#/components/parameters/scope" }]
+      responses: { "200": { description: OK } }
+  /v1/recurring/{scope}:
+    get:
+      summary: Gastos recurrentes con su próximo cobro y el resumen del mes (totales por moneda)
+      description: personal = de la persona del token (privado); business = del tenant (lo leen todos sus miembros).
+      parameters: [{ $ref: "#/components/parameters/scope" }]
+      responses: { "200": { description: OK }, "404": { description: Espacio desconocido } }
+    put:
+      summary: Crear o editar un gasto recurrente (business requiere el grupo admins)
+      parameters: [{ $ref: "#/components/parameters/scope" }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecurringRequest" }
+      responses: { "200": { description: Guardado }, "400": { description: Validación }, "403": { description: Requiere admins (business) } }
+  /v1/recurring/{scope}/{expense_id}:
+    delete:
+      summary: Eliminar un gasto recurrente
+      parameters:
+        - { $ref: "#/components/parameters/scope" }
+        - { name: expense_id, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: Eliminado }, "404": { description: No existe } }
 components:
   securitySchemes:
     cognito:
@@ -166,6 +192,7 @@ components:
   parameters:
     from: { name: from, in: query, schema: { type: string, format: date }, description: "Inclusivo. Por defecto: to - 30 días" }
     to: { name: to, in: query, schema: { type: string, format: date }, description: "Exclusivo. Por defecto: mañana (UTC)" }
+    scope: { name: scope, in: path, required: true, schema: { type: string, enum: [personal, business] } }
     dataset: { name: dataset, in: query, schema: { type: string, enum: [demo] }, description: "demo = leer el tenant de ejemplo (solo lectura)" }
   responses:
     BadRequest: { description: Validación fallida (detalle de Pydantic en el cuerpo) }
@@ -194,6 +221,27 @@ components:
         principal: { type: string }
         member: { type: string }
         team: { type: string }
+    RecurringRequest:
+      type: object
+      additionalProperties: false
+      required: [name, amount, billing_date]
+      properties:
+        expense_id: { type: string, description: "Vacío = nuevo" }
+        name: { type: string, example: Netflix }
+        service: { type: string, example: netflix, description: "Clave del catálogo" }
+        category: { type: string, example: streaming }
+        plan: { type: string, example: Estándar }
+        amount: { type: string, example: "44900", description: "Precio por cobro (por usuario en business)" }
+        currency: { type: string, pattern: "^[A-Z]{3}$", example: COP }
+        cycle: { type: string, enum: [weekly, monthly, quarterly, annual] }
+        billing_date: { type: string, format: date, description: "Una fecha de cobro conocida (próxima o última)" }
+        start_date: { type: string, format: date, description: "Suscrita desde (opcional)" }
+        end_date: { type: string, format: date, description: "Cancelada desde (opcional)" }
+        seats: { type: integer, minimum: 1, description: "Solo business" }
+        owner: { type: string, description: "Solo business" }
+        team: { type: string, description: "Solo business" }
+        active: { type: boolean }
+        notes: { type: string }
     ConnectionRequest:
       type: object
       additionalProperties: false
