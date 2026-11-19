@@ -1,4 +1,4 @@
 region                = "us-east-1"
 environment           = "dev"
-cognito_domain_prefix = "usagehub-dev-REEMPLAZAR"
+cognito_domain_prefix = "radar-gastos-dev-REEMPLAZAR"
 alert_email           = "finops@example.com"

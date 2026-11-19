@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from usage_hub.connectors import build_connector
-from usage_hub.connectors.catalog import InvalidConfigurationError, split_values
-from usage_hub.connectors.claude_code_local import ClaudeCodeLogConnector
-from usage_hub.connectors.pricing import DEFAULT_PRICE, price_for
-from usage_hub.domain.models import ConnectorConfig, Provider
-from usage_hub.domain.ports import CollectionWindow
+from radar_gastos.connectors import build_connector
+from radar_gastos.connectors.catalog import InvalidConfigurationError, split_values
+from radar_gastos.connectors.claude_code_local import ClaudeCodeLogConnector
+from radar_gastos.connectors.pricing import DEFAULT_PRICE, price_for
+from radar_gastos.domain.models import ConnectorConfig, Provider
+from radar_gastos.domain.ports import CollectionWindow
 
 WINDOW = CollectionWindow(date(2026, 11, 1), date(2026, 11, 17))
 
@@ -145,7 +145,7 @@ def test_subscription_rejects_bad_values() -> None:
 
 
 def test_catalog_validates_select_and_number_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    from usage_hub.connectors import catalog as cat
+    from radar_gastos.connectors import catalog as cat
 
     spec = cat.ProviderSpec(
         provider=Provider.CUSTOM,

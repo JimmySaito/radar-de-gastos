@@ -1,12 +1,12 @@
-"""Servidor local de UsageHub (sin AWS).
+"""Servidor local de Radar de gastos (sin AWS).
 
 Ejecuta el mismo handler de Lambda de la API traduciendo peticiones HTTP a eventos de
 API Gateway HTTP API v2. Ofrece dos conjuntos de datos:
 
 - **Ejemplo** (tenant ``demo``): organización ficticia generada al arrancar.
 - **Datos reales** (tenant ``local``): las conexiones que configures en la pantalla de
-  Configuración. La configuración y las credenciales se guardan en ``~/.usagehub``
-  (o ``$USAGEHUB_HOME``) y, al arrancar, se resincronizan los últimos días.
+  Configuración. La configuración y las credenciales se guardan en ``~/.radar-gastos``
+  (o ``$RADAR_GASTOS_HOME``) y, al arrancar, se resincronizan los últimos días.
 
     python scripts/local_server.py --port 8080
     # abrir http://localhost:8080
@@ -29,19 +29,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 os.environ.setdefault("STORAGE", "local")
 os.environ.setdefault("AUTH_MODE", "local")
-os.environ.setdefault("POWERTOOLS_METRICS_NAMESPACE", "UsageHub")
+os.environ.setdefault("POWERTOOLS_METRICS_NAMESPACE", "RadarDeGastos")
 os.environ.setdefault("POWERTOOLS_TRACE_DISABLED", "true")
 os.environ.setdefault("POWERTOOLS_METRICS_DISABLED", "true")
 os.environ.setdefault("POWERTOOLS_LOG_LEVEL", "WARNING")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 
-from usage_hub.adapters.localfs import default_home  # noqa: E402
-from usage_hub.adapters.memory import InMemoryQueue  # noqa: E402
-from usage_hub.handlers import api  # noqa: E402
-from usage_hub.handlers.bootstrap import container, today_utc  # noqa: E402
-from usage_hub.services.connections import ConnectionService  # noqa: E402
-from usage_hub.services.demo import seed_demo  # noqa: E402
-from usage_hub.services.ingestion import UsageCollector, UsageIngestor, parse_task  # noqa: E402
+from radar_gastos.adapters.localfs import default_home  # noqa: E402
+from radar_gastos.adapters.memory import InMemoryQueue  # noqa: E402
+from radar_gastos.handlers import api  # noqa: E402
+from radar_gastos.handlers.bootstrap import container, today_utc  # noqa: E402
+from radar_gastos.services.connections import ConnectionService  # noqa: E402
+from radar_gastos.services.demo import seed_demo  # noqa: E402
+from radar_gastos.services.ingestion import UsageCollector, UsageIngestor, parse_task  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
 REAL_TENANT = "local"
@@ -190,7 +190,9 @@ def main() -> None:
     print(f"datos de ejemplo listos ({stats.written} registros)", flush=True)
     print(f"configuración y credenciales en: {default_home()}", flush=True)
     threading.Thread(target=startup_sync, daemon=True).start()
-    print(f"UsageHub local en http://localhost:{args.port}  (Ctrl+C para detener)", flush=True)
+    print(
+        f"Radar de gastos local en http://localhost:{args.port}  (Ctrl+C para detener)", flush=True
+    )
     ThreadingHTTPServer.request_queue_size = (
         512  # backlog por defecto (5) rechaza conexiones bajo carga
     )

@@ -10,9 +10,9 @@ from typing import Any
 
 import pytest
 
-from usage_hub.adapters.memory import InMemoryQueue
-from usage_hub.domain.models import ConnectorConfig, Provider
-from usage_hub.handlers import bootstrap
+from radar_gastos.adapters.memory import InMemoryQueue
+from radar_gastos.domain.models import ConnectorConfig, Provider
+from radar_gastos.handlers import bootstrap
 
 pytestmark = pytest.mark.integration
 
@@ -64,11 +64,11 @@ def http_event(
 
 USER = {"sub": "u1", "custom:tenant_id": "acme", "cognito:groups": "[admins]"}
 VIEWER = {"sub": "u2", "custom:tenant_id": "acme"}
-M2M = {"client_id": "m2m-client", "scope": "usagehub/ingest"}
+M2M = {"client_id": "m2m-client", "scope": "radar-gastos/ingest"}
 
 
 def call(event: dict[str, Any]) -> tuple[int, Any]:
-    from usage_hub.handlers import api
+    from radar_gastos.handlers import api
 
     result = api.handler(event, Ctx())  # type: ignore[arg-type]
     return result["statusCode"], json.loads(result["body"]) if result.get("body") else None
@@ -76,7 +76,7 @@ def call(event: dict[str, Any]) -> tuple[int, Any]:
 
 def drain(c: bootstrap.Container) -> dict[str, Any]:
     """Entrega los mensajes encolados al handler colector como un evento SQS."""
-    from usage_hub.handlers import collector
+    from radar_gastos.handlers import collector
 
     assert isinstance(c.queue, InMemoryQueue)
     records = [
@@ -257,7 +257,7 @@ def test_budgets_and_mappings_admin(memory_env: bootstrap.Container) -> None:
 def test_demo_dataset_is_readable_but_writes_go_to_own_tenant(
     memory_env: bootstrap.Container,
 ) -> None:
-    from usage_hub.services.demo import seed_demo
+    from radar_gastos.services.demo import seed_demo
 
     seed_demo(
         memory_env.usage,
@@ -296,7 +296,7 @@ def test_bad_queries(memory_env: bootstrap.Container, query: dict[str, str]) -> 
 
 
 def test_scheduler_collector_and_budget_handlers(memory_env: bootstrap.Container) -> None:
-    from usage_hub.handlers import budget, scheduler
+    from radar_gastos.handlers import budget, scheduler
 
     memory_env.configs.put_connector(
         ConnectorConfig(
@@ -310,7 +310,7 @@ def test_scheduler_collector_and_budget_handlers(memory_env: bootstrap.Container
     assert drain(memory_env)["batchItemFailures"] == []
 
     rng_end = bootstrap.today_utc() + timedelta(days=1)
-    from usage_hub.domain.ledger import Dimension
+    from radar_gastos.domain.ledger import Dimension
 
     written = memory_env.usage.query_aggregates(
         "acme", rng_end - timedelta(days=3), rng_end, Dimension.SERVICE

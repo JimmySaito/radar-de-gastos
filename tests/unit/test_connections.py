@@ -9,17 +9,25 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import RecordFactory
-from usage_hub.adapters.localfs import FileConfigRepository, FileMappingRepository, FileSecretStore
-from usage_hub.adapters.memory import (
+from radar_gastos.adapters.localfs import (
+    FileConfigRepository,
+    FileMappingRepository,
+    FileSecretStore,
+)
+from radar_gastos.adapters.memory import (
     InMemoryConfigRepository,
     InMemoryMappingRepository,
     InMemoryQueue,
     InMemoryUsageRepository,
     StaticSecrets,
 )
-from usage_hub.connectors.catalog import CATALOG, InvalidConfigurationError, spec_for, split_values
-from usage_hub.domain.models import (
+from radar_gastos.connectors.catalog import (
+    CATALOG,
+    InvalidConfigurationError,
+    spec_for,
+    split_values,
+)
+from radar_gastos.domain.models import (
     Budget,
     ConnectorConfig,
     ConnectorStatus,
@@ -27,15 +35,16 @@ from usage_hub.domain.models import (
     Provider,
     UsageRecord,
 )
-from usage_hub.domain.ports import CollectionWindow
-from usage_hub.services.connections import ConnectionRequest, ConnectionService
-from usage_hub.services.ingestion import (
+from radar_gastos.domain.ports import CollectionWindow
+from radar_gastos.services.connections import ConnectionRequest, ConnectionService
+from radar_gastos.services.ingestion import (
     CollectTask,
     UsageCollector,
     UsageIngestor,
     parse_task,
     safe_error,
 )
+from tests.conftest import RecordFactory
 
 TODAY = date(2026, 11, 16)
 KEY = "sk-ant-admin-SUPERSECRET"
@@ -266,3 +275,24 @@ def test_local_files_survive_restart(tmp_path: Path) -> None:
     assert FileConfigRepository(tmp_path).list_connectors() == []
     assert FileMappingRepository(tmp_path).list_mappings("acme") == []
     assert FileSecretStore(tmp_path).get_secret(ref) == {}
+
+
+def test_legacy_home_is_copied_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Al renombrar el producto, la carpeta ~/.usagehub se copia a ~/.radar-gastos sin borrarse."""
+    from radar_gastos.adapters import localfs
+
+    monkeypatch.delenv("RADAR_GASTOS_HOME", raising=False)
+    monkeypatch.delenv("USAGEHUB_HOME", raising=False)
+    monkeypatch.setattr(localfs.Path, "home", lambda: tmp_path)
+    legacy = tmp_path / ".usagehub"
+    legacy.mkdir()
+    (legacy / "config.json").write_text('{"connectors": []}', encoding="utf-8")
+    home = localfs.default_home()
+    assert home == tmp_path / ".radar-gastos"
+    assert (home / "config.json").read_text(encoding="utf-8") == '{"connectors": []}'
+    assert (legacy / "config.json").exists()  # la original no se borra
+    (home / "config.json").write_text("{}", encoding="utf-8")
+    localfs.default_home()  # no vuelve a copiar encima de la nueva
+    assert (home / "config.json").read_text(encoding="utf-8") == "{}"
+    monkeypatch.setenv("USAGEHUB_HOME", str(tmp_path / "custom"))
+    assert localfs.default_home() == tmp_path / "custom"

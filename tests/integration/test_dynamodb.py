@@ -9,17 +9,23 @@ from typing import Any
 import pytest
 from botocore.exceptions import ClientError
 
-from tests.conftest import RecordFactory
-from usage_hub.adapters.dynamodb import (
+from radar_gastos.adapters.dynamodb import (
     ConcurrencyError,
     DynamoConfigRepository,
     DynamoMappingRepository,
     DynamoUsageRepository,
 )
-from usage_hub.adapters.keys import fact_key, months_between
-from usage_hub.domain.ledger import Dimension
-from usage_hub.domain.models import Attribution, Budget, ConnectorConfig, PrincipalMapping, Provider
-from usage_hub.domain.ports import WriteOutcome
+from radar_gastos.adapters.keys import fact_key, months_between
+from radar_gastos.domain.ledger import Dimension
+from radar_gastos.domain.models import (
+    Attribution,
+    Budget,
+    ConnectorConfig,
+    PrincipalMapping,
+    Provider,
+)
+from radar_gastos.domain.ports import WriteOutcome
+from tests.conftest import RecordFactory
 
 pytestmark = pytest.mark.integration
 ALICE = Attribution(member="alice", team="data")
@@ -195,7 +201,7 @@ def test_mapping_and_config_repositories(dynamodb_table: tuple[Any, str]) -> Non
 
 
 def test_settings_operations_on_dynamodb(dynamodb_table: tuple[Any, str]) -> None:
-    from usage_hub.domain.models import ConnectorStatus
+    from radar_gastos.domain.models import ConnectorStatus
 
     configs = DynamoConfigRepository(*dynamodb_table)
     mappings = DynamoMappingRepository(*dynamodb_table)
@@ -226,8 +232,8 @@ def test_settings_operations_on_dynamodb(dynamodb_table: tuple[Any, str]) -> Non
 
 
 def test_recurring_repository_on_dynamodb(dynamodb_table: tuple[Any, str]) -> None:
-    from usage_hub.adapters.dynamodb import DynamoRecurringRepository
-    from usage_hub.domain.recurring import RecurringExpense
+    from radar_gastos.adapters.dynamodb import DynamoRecurringRepository
+    from radar_gastos.domain.recurring import RecurringExpense
 
     repo = DynamoRecurringRepository(*dynamodb_table)
     e = RecurringExpense(
@@ -245,8 +251,8 @@ def test_recurring_repository_on_dynamodb(dynamodb_table: tuple[Any, str]) -> No
 
 
 def test_profiles_on_dynamodb(dynamodb_table: tuple[Any, str]) -> None:
-    from usage_hub.adapters.dynamodb import DynamoRecurringRepository
-    from usage_hub.domain.recurring import Profile
+    from radar_gastos.adapters.dynamodb import DynamoRecurringRepository
+    from radar_gastos.domain.recurring import Profile
 
     repo = DynamoRecurringRepository(*dynamodb_table)
     repo.put_profile("user:j", Profile(profile_id="maria-1", name="María"))

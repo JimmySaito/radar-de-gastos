@@ -63,7 +63,7 @@ def main() -> None:
     zip_dir(
         BUILD.parent, DIST / "layer.zip", BUILD.parent
     )  # entradas "python/..." (formato de layer)
-    zip_dir(ROOT / "src" / "usage_hub", DIST / "app.zip", ROOT / "src")
+    zip_dir(ROOT / "src" / "radar_gastos", DIST / "app.zip", ROOT / "src")
     for artifact in ("layer.zip", "app.zip"):
         print(f"{artifact}: {(DIST / artifact).stat().st_size / 1_048_576:.1f} MiB")
 

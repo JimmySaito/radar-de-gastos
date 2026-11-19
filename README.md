@@ -1,8 +1,11 @@
-# UsageHub
+# Radar de gastos
 
-**Observabilidad centralizada de consumo de IA y nube (FinOps).** Un solo dashboard para saber
-cuánto gasta la organización en **Claude (Anthropic)**, **OpenAI**, **Gemini (Google)**, **AWS** o
-cualquier otro sistema, y **quién** de cada equipo lo consume.
+> **Ningún cobro te toma por sorpresa.**
+
+**Todos tus gastos recurrentes, en un solo lugar.** En la **empresa**: cuánto se gasta en
+**Claude (Anthropic)**, **OpenAI**, **Gemini (Google)**, **AWS**, licencias SaaS o cualquier otro sistema, y
+**quién** de cada equipo lo consume. En lo **personal**: tus suscripciones (Netflix, Spotify, ChatGPT…), cuándo
+se cobra cada una y cuánto le toca a cada persona del hogar.
 
 [![CI](https://img.shields.io/badge/CI-GitHub_Actions-blue)](.github/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.13-blue)
@@ -18,7 +21,7 @@ cualquier otro sistema, y **quién** de cada equipo lo consume.
 
 Los proveedores entregan datos de consumo **tarde (4-24 h), revisables y en formatos distintos**,
 y AWS SQS entrega mensajes **al menos una vez**. Sumar ingenuamente cada lectura duplica el gasto
-reportado. UsageHub implementa un **ledger idempotente con deltas** sobre DynamoDB:
+reportado. Radar de gastos implementa un **ledger idempotente con deltas** sobre DynamoDB:
 
 - cada hecho tiene una clave natural determinista (`tenant|provider|service|principal|día`);
 - un *upsert* calcula la diferencia entre la versión anterior y la nueva (`domain/ledger.py`);
@@ -55,11 +58,11 @@ flowchart LR
 
 | Capa | Paquete | Patrones |
 |---|---|---|
-| Dominio | `usage_hub.domain` | Modelo canónico, *Value Objects*, puertos (hexagonal) |
-| Aplicación | `usage_hub.services` | Casos de uso, CQRS (modelo de lectura agregado) |
-| Conectores | `usage_hub.connectors` | Adapter + Strategy + Registry (plug-in, Open/Closed) |
-| Infraestructura | `usage_hub.adapters` | Repository, Optimistic Concurrency, Retry + Jitter |
-| Entrada | `usage_hub.handlers` | Composition Root, Competing Consumers, DLQ |
+| Dominio | `radar_gastos.domain` | Modelo canónico, *Value Objects*, puertos (hexagonal) |
+| Aplicación | `radar_gastos.services` | Casos de uso, CQRS (modelo de lectura agregado) |
+| Conectores | `radar_gastos.connectors` | Adapter + Strategy + Registry (plug-in, Open/Closed) |
+| Infraestructura | `radar_gastos.adapters` | Repository, Optimistic Concurrency, Retry + Jitter |
+| Entrada | `radar_gastos.handlers` | Composition Root, Competing Consumers, DLQ |
 
 ## Inicio rápido (sin AWS)
 
@@ -71,7 +74,7 @@ python scripts/local_server.py                       # abrir http://localhost:80
 
 ## Uso
 
-UsageHub tiene dos espacios, que se eligen en la barra superior:
+Radar de gastos tiene dos espacios, que se eligen en la barra superior:
 
 | Espacio | Para qué |
 |---|---|
@@ -113,8 +116,8 @@ Desde **Datos reales → Configuración**:
 3. **Presupuestos:** límite mensual por equipo (y opcionalmente por proveedor), con alertas al 50/80/100 %.
 4. **Ingesta por API:** endpoint y ejemplo `curl` para que *cualquier* otro sistema reporte consumo.
 
-Las credenciales **nunca vuelven al navegador**. En AWS se guardan en Secrets Manager (`usagehub/{tenant}/…`);
-en local, en `~/.usagehub/` (o `$USAGEHUB_HOME`), fuera del repositorio. Al reiniciar el servidor local, la
+Las credenciales **nunca vuelven al navegador**. En AWS se guardan en Secrets Manager (`radar-gastos/{tenant}/…`);
+en local, en `~/.radar-gastos/` (o `$RADAR_GASTOS_HOME`), fuera del repositorio. Al reiniciar el servidor local, la
 configuración se conserva y los últimos 30 días se resincronizan solos.
 
 | Proveedor | Qué credencial pide |
@@ -127,7 +130,7 @@ configuración se conserva y los últimos 30 días se resincronizan solos.
 
 ### Consumo con suscripción (claude.ai, Claude Code Pro/Max)
 
-Los planes individuales y Team no tienen API de uso. UsageHub los cubre de dos maneras:
+Los planes individuales y Team no tienen API de uso. Radar de gastos los cubre de dos maneras:
 
 - **Claude Code:** el conector *Claude Code (este equipo)* lee las sesiones locales, deduplica las respuestas
   (una misma respuesta aparece en varias líneas al transmitirse) y calcula el **costo equivalente en API** con la
@@ -182,7 +185,7 @@ Los resultados medidos están en [`docs/results/`](docs/results/).
 ## Estructura
 
 ```
-src/usage_hub/
+src/radar_gastos/
   domain/        modelo canónico, ledger (deltas), puertos
   services/      ingesta, dashboard (CQRS), presupuestos
   connectors/    anthropic_admin, openai_admin, aws_cost_explorer, google_billing, synthetic
@@ -196,7 +199,7 @@ scripts/         local_server, build_lambda, loadgen
 
 ## Agregar un proveedor nuevo
 
-1. Crear `src/usage_hub/connectors/<proveedor>.py` con una clase que implemente `fetch(tenant_id, window)`
+1. Crear `src/radar_gastos/connectors/<proveedor>.py` con una clase que implemente `fetch(tenant_id, window)`
    y devuelva `UsageRecord`.
 2. Registrar la fábrica con `@register(Provider.X)` y añadir el módulo a `_LAZY_MODULES`.
 3. Escribir la prueba de contrato con una respuesta grabada del proveedor.

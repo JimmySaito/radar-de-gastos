@@ -9,7 +9,7 @@ variable "description" {
 }
 
 variable "handler" {
-  description = "Ruta del handler, p. ej. usage_hub.handlers.api.handler"
+  description = "Ruta del handler, p. ej. radar_gastos.handlers.api.handler"
   type        = string
 }
 

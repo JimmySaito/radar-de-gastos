@@ -59,7 +59,7 @@ resource "aws_lambda_function" "this" {
   environment {
     variables = merge({
       POWERTOOLS_SERVICE_NAME      = var.name
-      POWERTOOLS_METRICS_NAMESPACE = "UsageHub"
+      POWERTOOLS_METRICS_NAMESPACE = "RadarDeGastos"
       POWERTOOLS_LOG_LEVEL         = var.log_level
     }, var.environment)
   }

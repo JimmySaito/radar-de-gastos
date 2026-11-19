@@ -12,10 +12,10 @@ os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("POWERTOOLS_TRACE_DISABLED", "true")
-os.environ.setdefault("POWERTOOLS_METRICS_NAMESPACE", "UsageHubTest")
+os.environ.setdefault("POWERTOOLS_METRICS_NAMESPACE", "RadarDeGastosTest")
 os.environ.setdefault("POWERTOOLS_DEV", "false")
 
-from usage_hub.domain.models import Provider, UsageRecord
+from radar_gastos.domain.models import Provider, UsageRecord
 
 RecordFactory = Callable[..., UsageRecord]
 
@@ -49,7 +49,7 @@ def dynamodb_table() -> Iterator[tuple[Any, str]]:
 
         client = boto3.client("dynamodb", region_name="us-east-1")
         client.create_table(
-            TableName="usagehub-test",
+            TableName="radar-gastos-test",
             BillingMode="PAY_PER_REQUEST",
             AttributeDefinitions=[
                 {"AttributeName": "PK", "AttributeType": "S"},
@@ -60,4 +60,4 @@ def dynamodb_table() -> Iterator[tuple[Any, str]]:
                 {"AttributeName": "SK", "KeyType": "RANGE"},
             ],
         )
-        yield client, "usagehub-test"
+        yield client, "radar-gastos-test"

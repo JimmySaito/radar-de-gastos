@@ -11,11 +11,11 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from usage_hub.adapters.localfs import FileRecurringRepository
-from usage_hub.adapters.memory import InMemoryRecurringRepository
-from usage_hub.domain.recurring import BillingCycle, RecurringExpense, Scope, summarize, upcoming
-from usage_hub.domain.recurring_catalog import catalog
-from usage_hub.services.recurring import (
+from radar_gastos.adapters.localfs import FileRecurringRepository
+from radar_gastos.adapters.memory import InMemoryRecurringRepository
+from radar_gastos.domain.recurring import BillingCycle, RecurringExpense, Scope, summarize, upcoming
+from radar_gastos.domain.recurring_catalog import catalog
+from radar_gastos.services.recurring import (
     ExpenseNotFoundError,
     InvalidExpenseError,
     RecurringRequest,
@@ -282,15 +282,15 @@ def test_file_repository_survives_restart(tmp_path: Path) -> None:
 
 # ---------------------------------------------------------------- personas
 def test_split_evenly_sums_exactly() -> None:
-    from usage_hub.domain.recurring import split_evenly
+    from radar_gastos.domain.recurring import split_evenly
 
     assert split_evenly(Decimal("100"), 3) == [Decimal("33.34"), Decimal("33.33"), Decimal("33.33")]
     assert sum(split_evenly(Decimal("59900"), 3)) == Decimal("59900")
 
 
 def test_member_views_match_person_totals_and_add_up() -> None:
-    from usage_hub.domain.recurring import UNASSIGNED, by_member, for_member
-    from usage_hub.services.demo import personal_demo
+    from radar_gastos.domain.recurring import UNASSIGNED, by_member, for_member
+    from radar_gastos.services.demo import personal_demo
 
     _, items = personal_demo(TODAY)
     people = by_member(items, TODAY)
@@ -305,7 +305,7 @@ def test_member_views_match_person_totals_and_add_up() -> None:
 
 
 def test_unassigned_view() -> None:
-    from usage_hub.domain.recurring import UNASSIGNED, by_member, for_member
+    from radar_gastos.domain.recurring import UNASSIGNED, by_member, for_member
 
     items = [expense(), expense(expense_id="b-1", name="B", member_ids=("ana",))]
     assert [e.expense_id for e in for_member(items, UNASSIGNED)] == ["netflix"]
@@ -313,7 +313,7 @@ def test_unassigned_view() -> None:
 
 
 def test_profiles_lifecycle_and_assignment() -> None:
-    from usage_hub.services.recurring import ProfileRequest
+    from radar_gastos.services.recurring import ProfileRequest
 
     repo = InMemoryRecurringRepository()
     service = RecurringService(repo, lambda: TODAY)
@@ -355,7 +355,7 @@ def test_business_ignores_member_ids() -> None:
 
 
 def test_file_repository_persists_profiles(tmp_path: Path) -> None:
-    from usage_hub.domain.recurring import Profile
+    from radar_gastos.domain.recurring import Profile
 
     repo = FileRecurringRepository(tmp_path)
     repo.put_profile("user:j", Profile(profile_id="jimmy-1", name="Jimmy"))

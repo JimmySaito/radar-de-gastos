@@ -11,14 +11,14 @@ import httpx
 import pytest
 import respx
 
-from usage_hub.connectors import build_connector, registered_providers
-from usage_hub.connectors.anthropic_admin import AnthropicAnalyticsConnector, actor_principal
-from usage_hub.connectors.aws_cost_explorer import AwsCostExplorerConnector
-from usage_hub.connectors.openai_admin import OpenAIUsageConnector
-from usage_hub.connectors.registry import UnknownProviderError
-from usage_hub.connectors.synthetic import SyntheticConnector
-from usage_hub.domain.models import ConnectorConfig, Provider
-from usage_hub.domain.ports import CollectionWindow, UsageConnector
+from radar_gastos.connectors import build_connector, registered_providers
+from radar_gastos.connectors.anthropic_admin import AnthropicAnalyticsConnector, actor_principal
+from radar_gastos.connectors.aws_cost_explorer import AwsCostExplorerConnector
+from radar_gastos.connectors.openai_admin import OpenAIUsageConnector
+from radar_gastos.connectors.registry import UnknownProviderError
+from radar_gastos.connectors.synthetic import SyntheticConnector
+from radar_gastos.domain.models import ConnectorConfig, Provider
+from radar_gastos.domain.ports import CollectionWindow, UsageConnector
 
 WINDOW = CollectionWindow(date(2026, 11, 1), date(2026, 11, 3))
 
@@ -314,7 +314,7 @@ def test_openai_errors_explain_the_cause(status: int, body: dict[str, Any], expe
 
 def test_record_builder_skips_rows_that_round_to_zero_and_negative_credits() -> None:
     """Regresión: OpenAI devuelve líneas de costo de 1e-7 USD que se redondean a 0."""
-    from usage_hub.connectors._util import RecordBuilder
+    from radar_gastos.connectors._util import RecordBuilder
 
     builder = RecordBuilder("acme", Provider.OPENAI)
     day = date(2026, 11, 2)

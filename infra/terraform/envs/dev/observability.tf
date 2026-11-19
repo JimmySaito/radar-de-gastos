@@ -106,8 +106,8 @@ resource "aws_cloudwatch_dashboard" "ops" {
           metrics = [
             ["AWS/Lambda", "ConcurrentExecutions", "FunctionName", module.collector_fn.function_name, { stat = "Maximum" }],
             [".", "Throttles", ".", ".", { stat = "Sum" }],
-            ["UsageHub", "LedgerRetryTransactionConflict", "service", "collector", { stat = "Sum" }],
-            ["UsageHub", "LedgerRetryConditionalCheckFailed", "service", "collector", { stat = "Sum" }],
+            ["RadarDeGastos", "LedgerRetryTransactionConflict", "service", "collector", { stat = "Sum" }],
+            ["RadarDeGastos", "LedgerRetryConditionalCheckFailed", "service", "collector", { stat = "Sum" }],
           ]
         }
       },
@@ -119,9 +119,9 @@ resource "aws_cloudwatch_dashboard" "ops" {
           stat   = "Sum"
           period = 60
           metrics = [
-            ["UsageHub", "RecordsAccepted", "service", "api"],
-            ["UsageHub", "RecordsWritten", "service", "collector"],
-            ["UsageHub", "RecordsUnchanged", "service", "collector"],
+            ["RadarDeGastos", "RecordsAccepted", "service", "api"],
+            ["RadarDeGastos", "RecordsWritten", "service", "collector"],
+            ["RadarDeGastos", "RecordsUnchanged", "service", "collector"],
           ]
         }
       },
@@ -132,7 +132,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
           region = data.aws_region.current.name
           period = 60
           metrics = [
-            ["UsageHub", "QueueToLedgerLatency", "service", "collector", { stat = "p50" }],
+            ["RadarDeGastos", "QueueToLedgerLatency", "service", "collector", { stat = "p50" }],
             ["...", { stat = "p95" }],
             ["...", { stat = "p99" }],
           ]

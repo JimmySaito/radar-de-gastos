@@ -16,7 +16,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project     = "usagehub"
+      Project     = "radar-gastos"
       Environment = var.environment
       ManagedBy   = "terraform"
       CostCenter  = var.cost_center

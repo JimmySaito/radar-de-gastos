@@ -3,13 +3,13 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "usage-hub"
+name = "radar-de-gastos"
 version = "0.1.0"
 description = "Plataforma centralizada de observabilidad de consumo (FinOps) para proveedores de IA y nube: Anthropic, OpenAI, Google, AWS y fuentes personalizadas."
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "MIT" }
-authors = [{ name = "UsageHub Team" }]
+authors = [{ name = "Radar de gastos Team" }]
 dependencies = [
   "pydantic>=2.9,<3",
   "httpx>=0.27,<1",
@@ -34,12 +34,12 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/usage_hub"]
+packages = ["src/radar_gastos"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra --strict-markers --cov=usage_hub --cov-report=term-missing --cov-fail-under=80"
+addopts = "-ra --strict-markers --cov=radar_gastos --cov-report=term-missing --cov-fail-under=80"
 markers = [
   "integration: pruebas con AWS emulado (moto)",
 ]
@@ -63,7 +63,7 @@ ignore = ["PLR0913", "S101", "PLC0415", "RUF001", "RUF002", "RUF003"]
 python_version = "3.13"
 strict = true
 mypy_path = "src"
-packages = ["usage_hub"]
+packages = ["radar_gastos"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
@@ -75,5 +75,5 @@ exclude_dirs = ["tests", "scripts"]
 
 [tool.coverage.run]
 branch = true
-source = ["usage_hub"]
-omit = ["src/usage_hub/connectors/google_billing.py"]
+source = ["radar_gastos"]
+omit = ["src/radar_gastos/connectors/google_billing.py"]

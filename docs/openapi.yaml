@@ -1,11 +1,11 @@
 openapi: 3.1.0
 info:
-  title: UsageHub API
+  title: Radar de gastos API
   version: 0.1.0
   description: |
     API de observabilidad de consumo de IA y nube. Autenticación con JWT de Amazon Cognito:
     - Usuarios del dashboard: id token (Authorization Code + PKCE). El tenant sale de `custom:tenant_id`.
-    - Sistemas externos: access token `client_credentials` con scope `usagehub/ingest`.
+    - Sistemas externos: access token `client_credentials` con scope `radar-gastos/ingest`.
     El tenant **nunca** se envía en el cuerpo: lo determina el token.
 servers:
   - url: https://{apiId}.execute-api.{region}.amazonaws.com
@@ -73,7 +73,7 @@ paths:
                   accepted: { type: integer }
                   record_ids: { type: array, items: { type: string } }
         "400": { $ref: "#/components/responses/BadRequest" }
-        "403": { description: Falta el scope usagehub/ingest }
+        "403": { description: Falta el scope radar-gastos/ingest }
         "429": { description: Límite de tasa de API Gateway }
   /v1/mappings:
     get: { summary: Lista mapeos principal → persona/equipo, responses: { "200": { description: OK } } }
@@ -214,7 +214,7 @@ components:
           scopes: { openid: Identidad, email: Correo }
         clientCredentials:
           tokenUrl: https://{domain}.auth.{region}.amazoncognito.com/oauth2/token
-          scopes: { usagehub/ingest: Enviar registros de consumo }
+          scopes: { radar-gastos/ingest: Enviar registros de consumo }
   parameters:
     from: { name: from, in: query, schema: { type: string, format: date }, description: "Inclusivo. Por defecto: to - 30 días" }
     to: { name: to, in: query, schema: { type: string, format: date }, description: "Exclusivo. Por defecto: mañana (UTC)" }

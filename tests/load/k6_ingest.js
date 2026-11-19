@@ -3,9 +3,9 @@
 //   k6 run -e BASE_URL=https://xxx.execute-api.us-east-1.amazonaws.com -e TOKEN=$TOKEN \
 //          -e SCENARIO=stress tests/load/k6_ingest.js
 //
-// TOKEN: access token client_credentials del cliente M2M (scope usagehub/ingest):
+// TOKEN: access token client_credentials del cliente M2M (scope radar-gastos/ingest):
 //   curl -s -u "$CLIENT_ID:$CLIENT_SECRET" -d grant_type=client_credentials \
-//        -d scope=usagehub/ingest "$COGNITO_DOMAIN/oauth2/token" | jq -r .access_token
+//        -d scope=radar-gastos/ingest "$COGNITO_DOMAIN/oauth2/token" | jq -r .access_token
 import http from "k6/http";
 import { check } from "k6";
 import { Trend, Counter } from "k6/metrics";

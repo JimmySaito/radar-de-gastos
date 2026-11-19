@@ -13,11 +13,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from radar_gastos.adapters.memory import InMemoryUsageRepository
+from radar_gastos.domain.ledger import Dimension, StoredFact, compute_deltas, is_noop
+from radar_gastos.domain.models import Attribution, Metrics, Provider, UsageRecord
+from radar_gastos.domain.ports import WriteOutcome
 from tests.conftest import RecordFactory
-from usage_hub.adapters.memory import InMemoryUsageRepository
-from usage_hub.domain.ledger import Dimension, StoredFact, compute_deltas, is_noop
-from usage_hub.domain.models import Attribution, Metrics, Provider, UsageRecord
-from usage_hub.domain.ports import WriteOutcome
 
 ALICE = Attribution(member="alice", team="data")
 BOB = Attribution(member="bob", team="platform")

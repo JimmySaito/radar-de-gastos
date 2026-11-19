@@ -32,7 +32,7 @@ Registra el conector sintético del tenant `demo` (el scheduler lo mantiene al d
 ## 4. Registrar conectores
 
 **Desde el dashboard (recomendado):** *Datos reales → Configuración → Conexiones*. La API guarda la credencial
-en Secrets Manager (`usagehub/{tenant}/{conexión}`) y la configuración solo conserva el ARN.
+en Secrets Manager (`radar-gastos/{tenant}/{conexión}`) y la configuración solo conserva el ARN.
 
 **Por API (automatización):** la misma operación que usa la pantalla.
 
@@ -45,7 +45,7 @@ curl -X POST "$API/v1/connectors/<connector_id>/sync?days=30" -H "Authorization:
 |---|---|
 | Anthropic | `{"admin_api_key": "sk-ant-admin..."}` |
 | OpenAI | `{"admin_api_key": "sk-admin-..."}` |
-| AWS | `{"role_arn": "arn:aws:iam::<payer>:role/usagehub-cost-reader", "external_id": "...", "owner_tag": "owner"}` |
+| AWS | `{"role_arn": "arn:aws:iam::<payer>:role/radar-gastos-cost-reader", "external_id": "...", "owner_tag": "owner"}` |
 | Google | `{"service_account_json": "{...}", "billing_table": "proyecto.dataset.tabla"}` |
 
 Después, mapear identidades técnicas a personas y equipos (*Configuración → Personas y equipos* o `PUT /v1/mappings`).
@@ -54,9 +54,9 @@ Después, mapear identidades técnicas a personas y equipos (*Configuración →
 
 | Alarma | Significado | Acción |
 |---|---|---|
-| `*-work-dlq-not-empty` | Mensajes fallaron 5 veces | Revisar logs del colector (`/aws/lambda/usagehub-dev-collector`) por `record_id`/`connector`. Corregir causa (credencial vencida, cambio de API del proveedor) y hacer *redrive* desde la consola de SQS. El ledger es idempotente: reprocesar es seguro. |
+| `*-work-dlq-not-empty` | Mensajes fallaron 5 veces | Revisar logs del colector (`/aws/lambda/radar-gastos-dev-collector`) por `record_id`/`connector`. Corregir causa (credencial vencida, cambio de API del proveedor) y hacer *redrive* desde la consola de SQS. El ledger es idempotente: reprocesar es seguro. |
 | `*-work-backlog-age` | Cola con retraso > 15 min | Ver `ConcurrentExecutions` y `LedgerRetryTransactionConflict`. Si hay muchos conflictos, el cuello es una celda agregada caliente: no subir concurrencia, ver ADR-0004 (sharding de agregados). Si hay throttling de un proveedor, bajar `collector_max_concurrency`. |
-| `*-api-5xx` | > 1 % de errores | Revisar X-Ray (traza por `requestId`) y logs JSON de `usagehub-dev-api`. |
+| `*-api-5xx` | > 1 % de errores | Revisar X-Ray (traza por `requestId`) y logs JSON de `radar-gastos-dev-api`. |
 | `*-api-latency-p95` | p95 > 800 ms | Revisar tamaño de rangos consultados; considerar caché (ADR-0007, trabajo futuro). |
 | `*-<función>-errors` | Excepciones no controladas | Logs con `correlation_id`. |
 

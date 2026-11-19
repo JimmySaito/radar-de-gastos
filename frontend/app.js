@@ -1,4 +1,4 @@
-// UsageHub: SPA sin build step. Lee /config.json (generado por Terraform o el servidor local).
+// Radar de gastos: SPA sin build step. Lee /config.json (generado por Terraform o el servidor local).
 // Rutas: #/empresa/{real|ejemplo}            dashboard de consumo de la empresa
 //        #/empresa/configuracion/{conexiones|licencias|personas|presupuestos|ingesta}
 //        #/personal                         mis suscripciones (privado por persona)
@@ -160,8 +160,8 @@ async function render() {
   $("backLabel").textContent = `Volver a ${VIEW_LABEL[state.lastView]}`;
   if (empresa && isSettings) { state.lastTab = tab; $("crumbTab").textContent = TAB_LABEL[tab] || tab; }
   document.title = !empresa
-    ? `${isSettings ? "Configuración · " : isDemo ? "Ejemplo · " : ""}Personal · UsageHub`
-    : isSettings ? `${TAB_LABEL[tab] || "Configuración"} · Empresa · UsageHub` : `${VIEW_LABEL[state.lastView]} · Empresa · UsageHub`;
+    ? `${isSettings ? "Configuración · " : isDemo ? "Ejemplo · " : ""}Personal · Radar de gastos`
+    : isSettings ? `${TAB_LABEL[tab] || "Configuración"} · Empresa · Radar de gastos` : `${VIEW_LABEL[state.lastView]} · Empresa · Radar de gastos`;
 
   if (!empresa) await (isSettings ? renderPersonalSettings() : renderPersonal(isDemo));
   else if (isSettings) await renderSettings(tab);
@@ -435,7 +435,7 @@ function showConnectionForm(spec, conn = null) {
         <button class="btn" type="button" id="testBtn">Probar conexión</button>
         <button class="btn primary" type="submit" id="saveBtn">${conn ? "Guardar cambios" : "Guardar y sincronizar"}</button>
       </div>
-      <p class="muted" style="margin:0;font-size:12px">Las credenciales se guardan cifradas en el servidor (Secrets Manager en AWS, <code>~/.usagehub</code> en local) y nunca se vuelven a mostrar.</p>
+      <p class="muted" style="margin:0;font-size:12px">Las credenciales se guardan cifradas en el servidor (Secrets Manager en AWS, <code>~/.radar-gastos</code> en local) y nunca se vuelven a mostrar.</p>
     </form></section>`;
   $("connForm").scrollIntoView({ behavior: "smooth", block: "start" });
   $("cancelForm").onclick = () => { $("connForm").innerHTML = ""; };
@@ -593,7 +593,7 @@ function renderIngest(panel) {
     <p class="muted">Cualquier sistema (un LLM propio, otra nube, una herramienta SaaS) puede reportar consumo con una llamada HTTP. Los envíos son idempotentes: reenviar el mismo registro no duplica el costo; enviar una versión corregida lo actualiza.</p>
     <section class="card" style="margin-bottom:12px"><div class="card-head"><h2>Endpoint</h2></div>
       <pre class="code">POST ${esc(base)}/v1/usage/records</pre>
-      ${state.config.authMode === "local" ? "" : '<p class="muted">Autenticación: token OAuth 2.0 <em>client_credentials</em> con el scope <code>usagehub/ingest</code> (cliente M2M de Cognito).</p>'}</section>
+      ${state.config.authMode === "local" ? "" : '<p class="muted">Autenticación: token OAuth 2.0 <em>client_credentials</em> con el scope <code>radar-gastos/ingest</code> (cliente M2M de Cognito).</p>'}</section>
     <section class="card" style="margin-bottom:12px"><div class="card-head"><h2>Ejemplo (bash / curl)</h2></div>
       <pre class="code">curl -X POST "${esc(base)}/v1/usage/records" \\
   -H "content-type: application/json" ${esc(auth)} \\
@@ -629,8 +629,8 @@ function money(amount, currency) {
 const moneyLines = (byCurrency) => Object.entries(byCurrency || {}).map(([c, v]) => money(v, c));
 const moneyText = (byCurrency) => moneyLines(byCurrency).join(" · ") || money(0, prefCurrency());
 
-function prefCurrency() { try { return localStorage.getItem("uh.currency") || "USD"; } catch { return "USD"; } }
-function setPrefCurrency(c) { try { localStorage.setItem("uh.currency", c); } catch { /* sin almacenamiento */ } }
+function prefCurrency() { try { return localStorage.getItem("radar.currency") || localStorage.getItem("uh.currency") || "USD"; } catch { return "USD"; } }
+function setPrefCurrency(c) { try { localStorage.setItem("radar.currency", c); } catch { /* sin almacenamiento */ } }
 const todayISO = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
 const dueLabel = (n) => (n === 0 ? "hoy" : n === 1 ? "mañana" : `en ${n} días`);
 const shortDate = (iso, opts = { day: "numeric", month: "short" }) => new Date(`${iso}T12:00:00`).toLocaleDateString("es", opts);

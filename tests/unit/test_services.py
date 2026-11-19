@@ -6,8 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from tests.conftest import RecordFactory
-from usage_hub.adapters.memory import (
+from radar_gastos.adapters.memory import (
     InMemoryAlerts,
     InMemoryConfigRepository,
     InMemoryMappingRepository,
@@ -15,12 +14,18 @@ from usage_hub.adapters.memory import (
     InMemoryUsageRepository,
     StaticSecrets,
 )
-from usage_hub.domain.ledger import Dimension
-from usage_hub.domain.models import Budget, ConnectorConfig, PrincipalMapping, Provider, UsageRecord
-from usage_hub.domain.ports import CollectionWindow
-from usage_hub.services.budgets import BudgetEvaluator
-from usage_hub.services.dashboard import DashboardService, DateRange, InvalidRangeError
-from usage_hub.services.ingestion import (
+from radar_gastos.domain.ledger import Dimension
+from radar_gastos.domain.models import (
+    Budget,
+    ConnectorConfig,
+    PrincipalMapping,
+    Provider,
+    UsageRecord,
+)
+from radar_gastos.domain.ports import CollectionWindow
+from radar_gastos.services.budgets import BudgetEvaluator
+from radar_gastos.services.dashboard import DashboardService, DateRange, InvalidRangeError
+from radar_gastos.services.ingestion import (
     CollectTask,
     RecordsTask,
     SchedulePlanner,
@@ -29,6 +34,7 @@ from usage_hub.services.ingestion import (
     chunk_records,
     parse_task,
 )
+from tests.conftest import RecordFactory
 
 TODAY = date(2026, 11, 16)
 
@@ -208,7 +214,7 @@ def test_budget_alerts_fire_once_per_threshold(repos, make_record: RecordFactory
 
 
 def test_demo_seed_is_idempotent() -> None:
-    from usage_hub.services.demo import seed_demo
+    from radar_gastos.services.demo import seed_demo
 
     usage, mappings, configs = (
         InMemoryUsageRepository(),

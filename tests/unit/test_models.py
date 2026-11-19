@@ -5,8 +5,8 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
+from radar_gastos.domain.models import Metrics
 from tests.conftest import RecordFactory
-from usage_hub.domain.models import Metrics
 
 
 def test_record_id_is_deterministic_and_ignores_metrics(make_record: RecordFactory) -> None:

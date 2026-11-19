@@ -3,7 +3,7 @@
 Registra el conector sintético del tenant ``demo`` (el scheduler lo mantiene al día cada
 hora), los mapeos persona/equipo, los presupuestos y 60 días de historia.
 
-    python scripts/seed_demo.py --table usagehub-dev --region us-east-1
+    python scripts/seed_demo.py --table radar-gastos-dev --region us-east-1
 """
 
 from __future__ import annotations
@@ -17,12 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import boto3
 
-from usage_hub.adapters.dynamodb import (
+from radar_gastos.adapters.dynamodb import (
     DynamoConfigRepository,
     DynamoMappingRepository,
     DynamoUsageRepository,
 )
-from usage_hub.services.demo import seed_demo
+from radar_gastos.services.demo import seed_demo
 
 
 def main() -> None:

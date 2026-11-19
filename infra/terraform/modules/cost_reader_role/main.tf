@@ -1,10 +1,10 @@
 #
 # Se despliega en la cuenta de administración (payer) de AWS Organizations.
-# Permite que UsageHub lea Cost Explorer con ExternalId (mitiga "confused deputy").
+# Permite que Radar de gastos lea Cost Explorer con ExternalId (mitiga "confused deputy").
 #
 
-variable "usagehub_account_id" {
-  description = "Cuenta donde corre UsageHub (la que asume este rol)."
+variable "radar_account_id" {
+  description = "Cuenta donde corre Radar de gastos (la que asume este rol)."
   type        = string
 }
 
@@ -19,7 +19,7 @@ data "aws_iam_policy_document" "trust" {
     actions = ["sts:AssumeRole"]
     principals {
       type        = "AWS"
-      identifiers = ["arn:aws:iam::${var.usagehub_account_id}:root"]
+      identifiers = ["arn:aws:iam::${var.radar_account_id}:root"]
     }
     condition {
       test     = "StringEquals"
@@ -29,13 +29,13 @@ data "aws_iam_policy_document" "trust" {
     condition {
       test     = "ArnLike"
       variable = "aws:PrincipalArn"
-      values   = ["arn:aws:iam::${var.usagehub_account_id}:role/usagehub-*-collector-role"]
+      values   = ["arn:aws:iam::${var.radar_account_id}:role/radar-gastos-*-collector-role"]
     }
   }
 }
 
 resource "aws_iam_role" "reader" {
-  name                 = "usagehub-cost-reader"
+  name                 = "radar-gastos-cost-reader"
   assume_role_policy   = data.aws_iam_policy_document.trust.json
   max_session_duration = 3600
 }

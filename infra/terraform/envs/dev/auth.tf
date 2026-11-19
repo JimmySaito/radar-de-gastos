@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------- identidad
 # Cognito: usuarios humanos (SPA con Authorization Code + PKCE) y clientes
-# máquina-a-máquina (client_credentials con scope usagehub/ingest).
+# máquina-a-máquina (client_credentials con scope radar-gastos/ingest).
 
 resource "aws_cognito_user_pool" "main" {
   name                     = local.name
@@ -57,8 +57,8 @@ resource "aws_cognito_user_pool_domain" "main" {
 }
 
 resource "aws_cognito_resource_server" "api" {
-  identifier   = "usagehub"
-  name         = "UsageHub API"
+  identifier   = "radar-gastos"
+  name         = "Radar de gastos API"
   user_pool_id = aws_cognito_user_pool.main.id
 
   scope {
@@ -97,7 +97,7 @@ resource "aws_cognito_user_pool_client" "ingest" {
   generate_secret                      = true
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["client_credentials"]
-  allowed_oauth_scopes                 = ["usagehub/ingest"]
+  allowed_oauth_scopes                 = ["radar-gastos/ingest"]
   supported_identity_providers         = ["COGNITO"]
   access_token_validity                = 60
   token_validity_units {

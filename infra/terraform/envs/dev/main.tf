@@ -1,5 +1,5 @@
 locals {
-  name = "usagehub-${var.environment}"
+  name = "radar-gastos-${var.environment}"
 }
 
 data "aws_caller_identity" "current" {}
@@ -75,7 +75,7 @@ module "api_fn" {
   source          = "../../modules/lambda_function"
   name            = "${local.name}-api"
   description     = "API HTTP: dashboard, ingesta push y gobierno"
-  handler         = "usage_hub.handlers.api.handler"
+  handler         = "radar_gastos.handlers.api.handler"
   package_path    = var.lambda_package
   layers          = [aws_lambda_layer_version.deps.arn]
   memory_mb       = 1024 # más memoria = más CPU = menor latencia p99 en agregaciones
@@ -102,11 +102,11 @@ module "api_fn" {
           "secretsmanager:CreateSecret", "secretsmanager:PutSecretValue", "secretsmanager:GetSecretValue",
           "secretsmanager:DeleteSecret", "secretsmanager:TagResource",
         ]
-        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:usagehub/*"
+        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:radar-gastos/*"
       },
       # "Probar conexión" del conector AWS.
       { Effect = "Allow", Action = ["ce:GetCostAndUsage"], Resource = "*" },
-      { Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:aws:iam::*:role/usagehub-cost-reader" },
+      { Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:aws:iam::*:role/radar-gastos-cost-reader" },
     ]
   })
 }
@@ -115,7 +115,7 @@ module "collector_fn" {
   source          = "../../modules/lambda_function"
   name            = "${local.name}-collector"
   description     = "Consumidor SQS: recolecta proveedores y escribe el ledger idempotente"
-  handler         = "usage_hub.handlers.collector.handler"
+  handler         = "radar_gastos.handlers.collector.handler"
   package_path    = var.lambda_package
   layers          = [aws_lambda_layer_version.deps.arn]
   memory_mb       = 1024
@@ -134,10 +134,10 @@ module "collector_fn" {
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
-        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:usagehub/*"
+        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:radar-gastos/*"
       },
       { Effect = "Allow", Action = ["ce:GetCostAndUsage"], Resource = "*" },
-      { Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:aws:iam::*:role/usagehub-cost-reader" },
+      { Effect = "Allow", Action = ["sts:AssumeRole"], Resource = "arn:aws:iam::*:role/radar-gastos-cost-reader" },
     ]
   })
 }
@@ -158,7 +158,7 @@ module "scheduler_fn" {
   source          = "../../modules/lambda_function"
   name            = "${local.name}-scheduler"
   description     = "Fan-out horario de tareas de recolección"
-  handler         = "usage_hub.handlers.scheduler.handler"
+  handler         = "radar_gastos.handlers.scheduler.handler"
   package_path    = var.lambda_package
   layers          = [aws_lambda_layer_version.deps.arn]
   memory_mb       = 256
@@ -178,7 +178,7 @@ module "budget_fn" {
   source          = "../../modules/lambda_function"
   name            = "${local.name}-budget"
   description     = "Evaluación diaria de presupuestos y alertas"
-  handler         = "usage_hub.handlers.budget.handler"
+  handler         = "radar_gastos.handlers.budget.handler"
   package_path    = var.lambda_package
   layers          = [aws_lambda_layer_version.deps.arn]
   memory_mb       = 512

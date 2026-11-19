@@ -7,7 +7,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from usage_hub.adapters.aws import SecretsManagerProvider, SnsAlertPublisher, SqsWorkQueue
+from radar_gastos.adapters.aws import SecretsManagerProvider, SnsAlertPublisher, SqsWorkQueue
 
 pytestmark = pytest.mark.integration
 
@@ -21,16 +21,16 @@ def aws() -> Iterator[None]:
 def test_secrets_are_cached(aws: None) -> None:
     client = boto3.client("secretsmanager")
     client.create_secret(
-        Name="usagehub/acme/openai", SecretString=json.dumps({"admin_api_key": "v1"})
+        Name="radar-gastos/acme/openai", SecretString=json.dumps({"admin_api_key": "v1"})
     )
     provider = SecretsManagerProvider(client, ttl_seconds=60)
-    assert provider.get_secret("usagehub/acme/openai") == {"admin_api_key": "v1"}
+    assert provider.get_secret("radar-gastos/acme/openai") == {"admin_api_key": "v1"}
     client.put_secret_value(
-        SecretId="usagehub/acme/openai", SecretString=json.dumps({"admin_api_key": "v2"})
+        SecretId="radar-gastos/acme/openai", SecretString=json.dumps({"admin_api_key": "v2"})
     )
-    assert provider.get_secret("usagehub/acme/openai")["admin_api_key"] == "v1"  # cacheado
+    assert provider.get_secret("radar-gastos/acme/openai")["admin_api_key"] == "v1"  # cacheado
     assert (
-        SecretsManagerProvider(client, ttl_seconds=0).get_secret("usagehub/acme/openai")[
+        SecretsManagerProvider(client, ttl_seconds=0).get_secret("radar-gastos/acme/openai")[
             "admin_api_key"
         ]
         == "v2"

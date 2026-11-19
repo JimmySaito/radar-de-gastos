@@ -1,10 +1,10 @@
-"""Envía el consumo local de Claude Code de esta persona a una instancia central de UsageHub.
+"""Envía el consumo local de Claude Code de esta persona a una instancia central de Radar de gastos.
 
 Pensado para equipos: cada persona lo ejecuta en su equipo (manualmente o con una tarea
 programada diaria) y el consumo queda centralizado por persona. Reenviar es seguro: la
 API de ingesta es idempotente y una relectura del mismo día solo actualiza el registro.
 
-    # contra el despliegue en AWS (token client_credentials con scope usagehub/ingest)
+    # contra el despliegue en AWS (token client_credentials con scope radar-gastos/ingest)
     python scripts/push_claude_code.py --api https://xxx.execute-api.us-east-1.amazonaws.com \\
         --token "$TOKEN" --user ana@empresa.com --days 7
 
@@ -24,8 +24,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import httpx
 
-from usage_hub.connectors.claude_code_local import ClaudeCodeLogConnector, resolve_home
-from usage_hub.domain.ports import CollectionWindow
+from radar_gastos.connectors.claude_code_local import ClaudeCodeLogConnector, resolve_home
+from radar_gastos.domain.ports import CollectionWindow
 
 BATCH = 1000
 
@@ -34,7 +34,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--api", required=True, help="URL base de la API de UsageHub")
+    parser.add_argument("--api", required=True, help="URL base de la API de Radar de gastos")
     parser.add_argument("--token", default="", help="Bearer token (despliegue en AWS)")
     parser.add_argument("--tenant", default="", help="x-tenant-id (solo servidor local)")
     parser.add_argument("--user", default=getpass.getuser(), help="persona a la que se atribuye")
