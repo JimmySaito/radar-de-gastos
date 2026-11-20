@@ -19,6 +19,9 @@
     .\scripts\deploy_aws.ps1 -AdminEmail tu@correo.com
 
 .EXAMPLE
+    .\scripts\deploy_aws.ps1 -SkipSeed -AutoApprove
+
+.EXAMPLE
     .\scripts\deploy_aws.ps1 -Destroy
 #>
 [CmdletBinding()]
@@ -31,6 +34,8 @@ param(
     # Perfil de AWS CLI; si se omite se usa el predeterminado.
     [string]$AwsProfile,
     [switch]$AutoApprove,
+    # No recarga la vista de Ejemplo (ya cargada): redespliegues en segundos.
+    [switch]$SkipSeed,
     [switch]$Destroy
 )
 
@@ -179,9 +184,14 @@ try {
 } finally { Pop-Location }
 
 # ---------------------------------------------------------------- datos de ejemplo
-Write-Step "Cargando la vista de Ejemplo"
-Push-Location $Root
-try { Invoke-Native $Python @("scripts\seed_demo.py", "--table", $table, "--region", $Region) } finally { Pop-Location }
+if ($SkipSeed) {
+    Write-Host ""
+    Write-Host "Vista de Ejemplo sin recargar (-SkipSeed)."
+} else {
+    Write-Step "Cargando la vista de Ejemplo (unos minutos la primera vez)"
+    Push-Location $Root
+    try { Invoke-Native $Python @("scripts\seed_demo.py", "--table", $table, "--region", $Region) } finally { Pop-Location }
+}
 
 # ---------------------------------------------------------------- administrador
 if ($AdminEmail) {
@@ -211,7 +221,8 @@ Write-Host "  API:        $api"
 Write-Host "  Operación:  $ops"
 Write-Host ""
 if ($IsLab) {
-    Write-Host "En el laboratorio, todo deja de responder cuando termina la sesión; vuelve a 'Start Lab' para reanudar."
+    Write-Host "En el laboratorio, al terminar la sesión la API sigue en línea pero no puede leer los datos (responde 503)."
+    Write-Host "Vuelve a 'Start Lab' para reanudar: no hace falta redesplegar."
 } else {
     Write-Host "La primera vez CloudFront puede tardar unos minutos en responder."
 }

@@ -508,3 +508,68 @@ def test_api_web_blocks_path_traversal_and_keeps_api_routes(web_env: None) -> No
 def test_api_does_not_serve_dashboard_unless_enabled(memory_env: bootstrap.Container) -> None:
     status, _ = call(http_event("GET", "/"))
     assert status == 404
+
+
+# ---------------------------------------------------------------- dependencias de AWS caídas
+def _client_error(code: str) -> Exception:
+    from botocore.exceptions import ClientError
+
+    return ClientError({"Error": {"Code": code, "Message": "x"}}, "Query")
+
+
+def _fail_with(monkeypatch: pytest.MonkeyPatch, c: bootstrap.Container, exc: Exception) -> None:
+    def boom(*_: Any, **__: Any) -> Any:
+        raise exc
+
+    monkeypatch.setattr(c.configs, "list_connectors", boom)
+
+
+def test_ready_checks_the_database(memory_env: bootstrap.Container) -> None:
+    status, body = call(http_event("GET", "/v1/ready"))
+    assert status == 200
+    assert body == {"status": "ok", "checks": {"datos": "ok"}}
+
+
+def test_ready_reports_503_when_database_denies_access(
+    memory_env: bootstrap.Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Lo que ocurrió en la prueba de caída: el laboratorio revoca el acceso a DynamoDB.
+    _fail_with(monkeypatch, memory_env, _client_error("AccessDeniedException"))
+    result = raw_call(http_event("GET", "/v1/ready"))
+    assert result["statusCode"] == 503
+    assert json.loads(result["body"])["checks"] == {"datos": "no disponible"}
+    status, _ = call(http_event("GET", "/v1/health"))
+    assert status == 200  # la vivacidad no depende de la base de datos
+
+
+@pytest.mark.parametrize(
+    "code", ["AccessDeniedException", "ThrottlingException", "ServiceUnavailable"]
+)
+def test_aws_unavailability_returns_clear_503(
+    memory_env: bootstrap.Container, monkeypatch: pytest.MonkeyPatch, code: str
+) -> None:
+    _fail_with(monkeypatch, memory_env, _client_error(code))
+    result = raw_call(http_event("GET", "/v1/connectors", claims=USER))
+    assert result["statusCode"] == 503
+    assert result["headers"]["Retry-After"] == "30"
+    body = json.loads(result["body"])
+    assert "no está disponible" in body["message"]
+    assert "arn:aws" not in result["body"]  # no filtra detalles internos
+
+
+def test_connection_error_to_aws_returns_503(
+    memory_env: bootstrap.Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from botocore.exceptions import EndpointConnectionError
+
+    _fail_with(monkeypatch, memory_env, EndpointConnectionError(endpoint_url="https://dynamodb"))
+    status, body = call(http_event("GET", "/v1/connectors", claims=USER))
+    assert status == 503 and "no está disponible" in body["message"]
+
+
+def test_unexpected_aws_error_is_a_generic_500(
+    memory_env: bootstrap.Container, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fail_with(monkeypatch, memory_env, _client_error("ValidationException"))
+    status, body = call(http_event("GET", "/v1/connectors", claims=USER))
+    assert status == 500 and body["message"] == "Error interno"

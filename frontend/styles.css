@@ -71,6 +71,8 @@ body {
 .filters button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 main { max-width: 1280px; margin: 0 auto; padding: 20px 24px 8px; }
 .banner { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--status-critical); color: var(--text-primary); margin-top: 0; }
+/* Datos de una consulta anterior que no se pudo actualizar. */
+#dashContent.stale { opacity: .55; filter: grayscale(.4); transition: opacity .2s; }
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
 .kpi, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
 .kpi h2, .card h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-secondary); }

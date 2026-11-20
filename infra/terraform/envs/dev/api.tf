@@ -78,6 +78,14 @@ resource "aws_apigatewayv2_route" "health" {
   target    = "integrations/${aws_apigatewayv2_integration.api.id}"
 }
 
+# Chequeo profundo: verifica que la API pueda leer DynamoDB (503 si no).
+resource "aws_apigatewayv2_route" "ready" {
+  # checkov:skip=CKV_AWS_309: sonda de disponibilidad pública a propósito; solo devuelve ok/degradado
+  api_id    = aws_apigatewayv2_api.http.id
+  route_key = "GET /v1/ready"
+  target    = "integrations/${aws_apigatewayv2_integration.api.id}"
+}
+
 # Sin CloudFront, la API entrega el dashboard: "/" y cualquier ruta fuera de /v1 (las rutas
 # /v1 definidas arriba tienen prioridad sobre {proxy+}).
 resource "aws_apigatewayv2_route" "web" {

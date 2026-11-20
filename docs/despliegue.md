@@ -58,7 +58,8 @@ Set-ExecutionPolicy -Scope Process Bypass
 Después:
 
 1. Revisa tu correo: Cognito envía una **contraseña temporal** (válida 3 días) y SNS pide **confirmar la
-   suscripción** a las alertas.
+   suscripción** a las alertas. **Confírmala**: sin ese paso las alarmas se disparan pero el correo nunca llega (la
+   suscripción queda en `PendingConfirmation`).
 2. Abre la URL del dashboard, inicia sesión y cambia la contraseña. La primera vez CloudFront puede tardar unos
    minutos.
 3. En *Datos reales → ⚙ Configuración* conecta tus proveedores igual que en local; las llaves quedan en
@@ -104,7 +105,9 @@ El resto (Lambda, SQS, DynamoDB, Cognito, Scheduler, alarmas) es idéntico. Paso
 4. `.\scripts\deploy_aws.ps1 -AdminEmail tu@correo.com -Tenant mi-empresa`.
 
 Las credenciales cambian en cada sesión del laboratorio: repite el paso 2 cada vez. Al terminar la sesión los
-recursos se conservan, pero no responden hasta que vuelvas a iniciarla.
+recursos y los datos se conservan; el dashboard y el inicio de sesión siguen en línea, pero la API no puede
+leer la base de datos y responde 503 (medido en la prueba de disponibilidad). Con *Start Lab* vuelve a funcionar
+sin redesplegar. Para usar solo el dashboard no hace falta copiar credenciales: basta con *Start Lab*.
 
 ## 3. Plan de respaldo para la presentación
 

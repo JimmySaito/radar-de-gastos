@@ -58,7 +58,7 @@ Después, mapear identidades técnicas a personas y equipos (*Configuración →
 |---|---|---|
 | `*-work-dlq-not-empty` | Mensajes fallaron 5 veces | Revisar logs del colector (`/aws/lambda/radar-gastos-dev-collector`) por `record_id`/`connector`. Corregir causa (credencial vencida, cambio de API del proveedor) y hacer *redrive* desde la consola de SQS. El ledger es idempotente: reprocesar es seguro. |
 | `*-work-backlog-age` | Cola con retraso > 15 min | Ver `ConcurrentExecutions` y `LedgerRetryTransactionConflict`. Si hay muchos conflictos, el cuello es una celda agregada caliente: no subir concurrencia, ver ADR-0004 (sharding de agregados). Si hay throttling de un proveedor, bajar `collector_max_concurrency`. |
-| `*-api-5xx` | > 1 % de errores | Revisar X-Ray (traza por `requestId`) y logs JSON de `radar-gastos-dev-api`. |
+| `*-api-5xx` | > 1 % de errores en 2 de 5 minutos | Consultar `GET /v1/ready`: si responde 503, la API no puede leer DynamoDB (permisos, limitación o caída) y responde 503 con `Retry-After`. Revisar los logs de acceso de API Gateway (`integrationErr`), que se escriben aunque la función pierda permisos, y luego X-Ray y los logs de `radar-gastos-dev-api`. |
 | `*-api-latency-p95` | p95 > 800 ms | Revisar tamaño de rangos consultados; considerar caché (ADR-0007, trabajo futuro). |
 | `*-<función>-errors` | Excepciones no controladas | Logs con `correlation_id`. |
 

@@ -43,6 +43,18 @@ from aws_lambda_powertools.event_handler.exceptions import (
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.metrics import MetricUnit
 from aws_lambda_powertools.utilities.typing import LambdaContext
+
+try:  # boto3/botocore vienen en el runtime de Lambda y en el extra [aws]
+    from botocore.exceptions import BotoCoreError, ClientError
+except ImportError:  # pragma: no cover - instalación mínima sin AWS
+
+    class BotoCoreError(Exception):  # type: ignore[no-redef]
+        pass
+
+    class ClientError(Exception):  # type: ignore[no-redef]
+        response: dict[str, Any] = {}  # noqa: RUF012
+
+
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from radar_gastos.connectors.catalog import CATALOG, InvalidConfigurationError
@@ -196,10 +208,76 @@ def _expense_not_found(exc: ExpenseNotFoundError) -> Response[Any]:
     return Response(404, "application/json", {"statusCode": 404, "message": str(exc)})
 
 
+# ---------------------------------------------------------------- dependencias de AWS
+# Errores que indican que AWS no está disponible para la función (permisos revocados,
+# limitación, caída del servicio), no un error del código: se responden con 503.
+UNAVAILABLE_CODES = (
+    "AccessDenied",
+    "UnrecognizedClient",
+    "ExpiredToken",
+    "Throttling",
+    "ProvisionedThroughputExceeded",
+    "RequestLimitExceeded",
+    "ServiceUnavailable",
+    "InternalServerError",
+)
+UNAVAILABLE_MESSAGE = (
+    "El servicio de datos no está disponible en este momento. Intenta de nuevo en unos minutos."
+)
+
+
+def _unavailable() -> Response[Any]:
+    return Response(
+        503,
+        "application/json",
+        {"statusCode": 503, "message": UNAVAILABLE_MESSAGE},
+        headers={"Retry-After": "30"},
+    )
+
+
+@app.exception_handler(ClientError)  # type: ignore[untyped-decorator]
+def _aws_client_error(exc: ClientError) -> Response[Any]:
+    code = str(exc.response.get("Error", {}).get("Code", ""))
+    if code.startswith(UNAVAILABLE_CODES):
+        logger.error("dependencia de AWS no disponible", extra={"aws_error": code})
+        metrics.add_metric(name="DependencyUnavailable", unit=MetricUnit.Count, value=1)
+        return _unavailable()
+    logger.exception("error de AWS no esperado", extra={"aws_error": code})
+    return Response(500, "application/json", {"statusCode": 500, "message": "Error interno"})
+
+
+@app.exception_handler(BotoCoreError)  # type: ignore[untyped-decorator]
+def _aws_connection_error(exc: BotoCoreError) -> Response[Any]:
+    logger.error("sin conexión con AWS", extra={"aws_error": type(exc).__name__})
+    metrics.add_metric(name="DependencyUnavailable", unit=MetricUnit.Count, value=1)
+    return _unavailable()
+
+
 # ---------------------------------------------------------------- lectura
 @app.get("/v1/health")
 def health() -> dict[str, str]:
+    """Vivacidad: la función responde. No consulta dependencias (ver /v1/ready)."""
     return {"status": "ok"}
+
+
+@app.get("/v1/ready")
+def ready() -> Response[Any]:
+    """Disponibilidad real: la función puede leer la base de datos.
+
+    /v1/health respondía 200 aunque DynamoDB negara el acceso (prueba de caída del
+    laboratorio); este chequeo hace una consulta liviana y responde 503 si falla.
+    """
+    try:
+        container().configs.list_connectors(container().settings.demo_tenant)
+    except (ClientError, BotoCoreError) as exc:
+        logger.error("chequeo de disponibilidad fallido", extra={"aws_error": type(exc).__name__})
+        return Response(
+            503,
+            "application/json",
+            {"status": "degradado", "checks": {"datos": "no disponible"}},
+            headers={"Retry-After": "30"},
+        )
+    return Response(200, "application/json", {"status": "ok", "checks": {"datos": "ok"}})
 
 
 @app.get("/v1/me")

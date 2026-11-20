@@ -6,9 +6,13 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
   alarm_description   = "Tasa de errores 5xx de la API > 1% (SLO de disponibilidad 99.9%)."
   comparison_operator = "GreaterThanThreshold"
   threshold           = 1
-  evaluation_periods  = 3
+  # 2 de 5 minutos: con poco tráfico una caída deja errores en pocos minutos sueltos. Con
+  # 3 de 3, la prueba de caída del laboratorio (errores en 2 minutos) no la disparaba.
+  evaluation_periods  = 5
+  datapoints_to_alarm = 2
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn] # avisa también la recuperación
 
   metric_query {
     id          = "rate"

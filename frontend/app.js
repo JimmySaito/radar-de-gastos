@@ -7,7 +7,7 @@
 
 const PROVIDER_ORDER = ["anthropic", "openai", "google", "aws", "claude_code", "custom", "synthetic"];
 const PROVIDER_LABEL = { anthropic: "Anthropic (Claude)", openai: "OpenAI", google: "Google (Gemini)", aws: "AWS", claude_code: "Claude Code (estimado)", custom: "Personalizado", synthetic: "Generador de prueba", subscription: "Suscripción" };
-const state = { days: 30, groupBy: "provider", config: null, me: null, charts: {}, catalog: null, editing: null, lastView: "real" };
+const state = { days: 30, groupBy: "provider", config: null, me: null, charts: {}, catalog: null, editing: null, lastView: "real", shown: null };
 const TAB_LABEL = { conexiones: "Conexiones", licencias: "Licencias y suscripciones", personas: "Personas y equipos", presupuestos: "Presupuestos", ingesta: "Ingesta por API" };
 const VIEW_LABEL = { real: "Datos reales", ejemplo: "Ejemplo" };
 
@@ -303,10 +303,26 @@ async function renderDashboard(isDemo) {
     renderRanking("membersChart", summary.top_members);
     renderRanking("servicesChart", summary.top_services);
     await renderLicensesCard(isDemo);
+    state.shown = { days: state.days, isDemo, at: new Date() };
+    $("dashContent").classList.remove("stale");
   } catch (err) {
     $("banner").hidden = false;
-    $("banner").textContent = `No se pudieron cargar los datos: ${err.message}`;
+    const shown = state.shown;
+    if (shown && shown.isDemo === isDemo) {
+      // Se conservan los últimos datos, pero sin fingir que son del rango pedido.
+      state.days = shown.days;
+      syncRangeButtons();
+      $("dashContent").classList.add("stale");
+      const at = shown.at.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+      $("banner").textContent = `No se pudieron actualizar los datos: ${err.message.replace(/\.?$/, ".")} Se muestran los últimos ${shown.days} días consultados a las ${at}.`;
+    } else {
+      $("banner").textContent = `No se pudieron cargar los datos: ${err.message}`;
+    }
   }
+}
+
+function syncRangeButtons() {
+  document.querySelectorAll("[data-days]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.days) === state.days)));
 }
 
 // ------------------------------------------------------------------ configuración
@@ -1111,8 +1127,7 @@ async function main() {
   if (!location.hash) history.replaceState(null, "", "#/empresa/real");
   setupExpenseDialog();
   document.querySelectorAll("[data-days]").forEach((btn) => btn.addEventListener("click", () => {
-    document.querySelectorAll("[data-days]").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
-    state.days = Number(btn.dataset.days); render();
+    state.days = Number(btn.dataset.days); syncRangeButtons(); render();
   }));
   $("groupBy").addEventListener("change", (e) => { state.groupBy = e.target.value; render(); });
   document.querySelectorAll("[data-table-for]").forEach((btn) => btn.addEventListener("click", () => {

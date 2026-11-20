@@ -1,0 +1,55 @@
+{
+  "prueba": "Caída controlada del ambiente AWS Academy Learner Lab (End Lab / Start Lab)",
+  "fecha": "2026-11-20",
+  "region": "us-east-1",
+  "fases": [
+    {
+      "phase": "base",
+      "items": 6313,
+      "demo_facts": 2807,
+      "cognito_users": 1
+    },
+    {
+      "phase": "base",
+      "ui": {
+        "vista": "Empresa/Ejemplo 30 dias",
+        "costo_total_usd": "6275.08",
+        "rango": "2026-10-22..2026-11-21",
+        "tokens": "1643.7 M",
+        "solicitudes": "2.1 M",
+        "equipo_top": "seguridad 1630.97"
+      }
+    },
+    {
+      "phase": "caida",
+      "ts": "~00:06-00:15 UTC",
+      "probe": "health/dashboard/config/cognito 200, summary sin token 401",
+      "credenciales_cli": "AccessDenied por voc-cancel-cred (deny explicito)",
+      "ui_pestana_abierta": "cambiar a 7 dias -> 'No se pudieron cargar los datos: Internal Server Error'; quedan visibles los datos de 30 dias (desactualizados, sin aviso)",
+      "ui_incognito": "Hosted UI de Cognito carga y el login funciona; la API responde 500 'No se pudo conectar con la API'",
+      "respaldo_local": "localhost:8080 funciona con datos reales locales (94,14 USD, 30 dias)"
+    },
+    {
+      "phase": "recuperacion",
+      "ts": "00:13 UTC",
+      "items": 6313,
+      "demo_facts": 2807,
+      "cognito_users": 1,
+      "dlq": 0,
+      "cola": 0,
+      "probe": "igual que la linea base"
+    },
+    {
+      "phase": "evidencia",
+      "fuente": "logs de acceso de API Gateway",
+      "ultima_consulta_ok": "00:04:48",
+      "primer_500": "00:06:17",
+      "primera_consulta_ok_tras_start_lab": "00:12:06 (411 ms)",
+      "causa": "AccessDeniedException: LabRole no puede dynamodb:Query por un deny explicito en una SCP de AWS Organizations al terminar la sesion",
+      "logs_lambda": "sin eventos entre 00:05 y 00:12: la Lambda tampoco pudo escribir logs (misma SCP); solo quedaron los logs de acceso de API Gateway",
+      "alarma_5xx": "no se disparo: exige 3 minutos seguidos sobre 1 % y los errores solo ocurrieron en 2 minutos con poco trafico",
+      "5xx_cloudwatch": "00:06 = 3, 00:07 = 1"
+    }
+  ],
+  "sondas": "aws-lab-caida-sondas.jsonl (una medición por línea: fase, hora, ruta, código, ms)"
+}

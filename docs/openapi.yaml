@@ -17,10 +17,17 @@ security:
 paths:
   /v1/health:
     get:
-      summary: Health check
+      summary: Vivacidad (la función responde; no consulta dependencias)
       security: []
       responses:
         "200": { description: OK }
+  /v1/ready:
+    get:
+      summary: Disponibilidad real (la API puede leer la base de datos)
+      security: []
+      responses:
+        "200": { description: "Todo disponible: {status: ok, checks: {datos: ok}}" }
+        "503": { description: "Degradado: la base de datos no responde o niega el acceso. Incluye Retry-After." }
   /v1/summary:
     get:
       summary: KPIs del dashboard para un rango de fechas
