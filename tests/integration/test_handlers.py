@@ -582,3 +582,10 @@ def test_token_with_invalid_tenant_gets_clear_403(memory_env: bootstrap.Containe
     )
     assert status == 403
     assert "minúsculas" in body["message"]
+
+
+def test_top_members_is_served_apart_from_the_summary(memory_env: bootstrap.Container) -> None:
+    status, summary = call(http_event("GET", "/v1/summary", claims=USER))
+    assert status == 200 and "top_members" not in summary
+    status, body = call(http_event("GET", "/v1/summary/members", claims=USER))
+    assert status == 200 and isinstance(body["top_members"], list)

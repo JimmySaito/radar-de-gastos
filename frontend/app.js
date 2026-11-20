@@ -269,6 +269,16 @@ function renderSeries(ts) {
     <tbody>${ts.days.map((day, i) => `<tr><td>${day}</td>${datasets.map((d) => `<td class="num">${usd.format(d.data[i])}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 
+// El top de personas llega aparte: el resto del dashboard no espera por él.
+async function loadMembersRanking(params) {
+  try {
+    const { top_members: rows } = await api("/v1/summary/members", { params });
+    renderRanking("membersChart", rows);
+  } catch {
+    renderRanking("membersChart", []);
+  }
+}
+
 function renderRanking(id, rows) {
   const grouped = {};
   for (const r of rows) {
@@ -314,7 +324,7 @@ async function renderDashboard(isDemo) {
     }
     $("budgetsLink").hidden = isDemo || !state.me?.is_admin;
     renderKpis(summary); renderProviders(summary); renderBudgets(budgets); renderSeries(ts);
-    renderRanking("membersChart", summary.top_members);
+    loadMembersRanking({ ...r, dataset });
     renderRanking("servicesChart", summary.top_services);
     await renderLicensesCard(isDemo);
     state.shown = { days: state.days, isDemo, at: new Date() };

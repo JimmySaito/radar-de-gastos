@@ -37,6 +37,7 @@ locals {
   protected_routes = [
     "GET /v1/me",
     "GET /v1/summary",
+    "GET /v1/summary/members",
     "GET /v1/timeseries",
     "GET /v1/identities",
     "POST /v1/usage/records",

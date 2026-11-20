@@ -164,6 +164,7 @@ def main() -> None:
     parser.add_argument("--pause", type=float, default=90, help="segundos entre escenarios")
     parser.add_argument("--region", default="us-east-1")
     parser.add_argument("--tag", default="", help="sufijo de los archivos (p. ej. sharding)")
+    parser.add_argument("--mode", choices=["mixed", "read", "ingest"], default="mixed")
     args = parser.parse_args()
 
     api_url = tf_output("api_url")
@@ -187,7 +188,7 @@ def main() -> None:
             token=token,
             tenant="",
             scenario=scenario,
-            mode="mixed",
+            mode=args.mode,
             read_ratio=args.read_ratio,
             rps=args.rps,
             duration=args.duration,

@@ -1,0 +1,247 @@
+{
+  "run_id": "221f72dc",
+  "scenario": "load",
+  "mode": "mixed",
+  "target_rps": 20.0,
+  "duration_s": 120.9,
+  "requests": 2400,
+  "achieved_rps": 19.8,
+  "records_per_s": 220.8,
+  "duplicates_sent": 186,
+  "client_dropped": 0,
+  "status": {
+    "ingest:202": 1254,
+    "read:200": 1146
+  },
+  "error_rate": 0.0,
+  "consistency": {
+    "expected_cost": "667889.47",
+    "observed_cost": "667889.47",
+    "converged": true,
+    "convergence_s": 17.1
+  },
+  "ingest_latency_ms": {
+    "p50": 129.2,
+    "p95": 341.4,
+    "p99": 2349.6,
+    "max": 2468.2,
+    "mean": 215.3
+  },
+  "read_latency_ms": {
+    "p50": 846.9,
+    "p95": 8054.9,
+    "p99": 8511.8,
+    "max": 9222.2,
+    "mean": 2381.3
+  },
+  "server": {
+    "api_requests": {
+      "per_minute": [
+        215.0,
+        1200.0,
+        990.0,
+        4.0
+      ],
+      "max": 1200.0,
+      "sum": 2409.0
+    },
+    "api_5xx": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "api_4xx": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "api_latency_p95": {
+      "per_minute": [
+        6440.0,
+        6154.7,
+        7922.2,
+        23.8
+      ],
+      "max": 7922.2,
+      "sum": 20540.7
+    },
+    "api_fn_concurrency": {
+      "per_minute": [
+        54.0,
+        59.0,
+        62.0,
+        1.0
+      ],
+      "max": 62.0,
+      "sum": 176.0
+    },
+    "api_fn_duration_p95": {
+      "per_minute": [
+        5320.8,
+        6137.5,
+        7890.1,
+        9.6
+      ],
+      "max": 7890.1,
+      "sum": 19358.0
+    },
+    "api_fn_throttles": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "collector_concurrency": {
+      "per_minute": [
+        7.0,
+        16.0,
+        13.0,
+        3.0
+      ],
+      "max": 16.0,
+      "sum": 39.0
+    },
+    "collector_invocations": {
+      "per_minute": [
+        11.0,
+        158.0,
+        167.0,
+        4.0
+      ],
+      "max": 167.0,
+      "sum": 340.0
+    },
+    "collector_errors": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "collector_duration_p95": {
+      "per_minute": [
+        10743.9,
+        9578.3,
+        4797.9,
+        2321.0
+      ],
+      "max": 10743.9,
+      "sum": 27441.0
+    },
+    "queue_oldest_s": {
+      "per_minute": [
+        0.0,
+        0.0,
+        20.0,
+        6.0,
+        0.0
+      ],
+      "max": 20.0,
+      "sum": 26.0
+    },
+    "queue_visible": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "dlq_visible": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "ddb_write_units": {
+      "per_minute": [
+        6936.0,
+        138664.0,
+        102888.0,
+        1664.0
+      ],
+      "max": 138664.0,
+      "sum": 250152.0
+    },
+    "ddb_read_units": {
+      "per_minute": [
+        28266.5,
+        129471.5,
+        138432.5,
+        308.5
+      ],
+      "max": 138432.5,
+      "sum": 296479.0
+    },
+    "ddb_throttled": {
+      "per_minute": [],
+      "max": 0,
+      "sum": 0
+    },
+    "ledger_written": {
+      "per_minute": [
+        325.0,
+        14675.0,
+        11500.0,
+        200.0
+      ],
+      "max": 14675.0,
+      "sum": 26700.0
+    },
+    "queue_to_ledger_p95_ms": {
+      "per_minute": [
+        6450.3,
+        12791.8,
+        5176.4,
+        17099.0
+      ],
+      "max": 17099.0,
+      "sum": 41517.5
+    },
+    "ledger_retry_conflict": {
+      "per_minute": [
+        22.0,
+        2844.0,
+        1679.0,
+        8.0
+      ],
+      "max": 2844.0,
+      "sum": 4553.0
+    },
+    "ledger_retry_condition": {
+      "per_minute": [
+        9.0,
+        5.0
+      ],
+      "max": 9.0,
+      "sum": 14.0
+    }
+  },
+  "environment": "AWS Academy Learner Lab, us-east-1",
+  "executed_at": "2026-11-20T02:16:37+00:00"
+}

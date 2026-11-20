@@ -40,6 +40,15 @@ paths:
               schema: { $ref: "#/components/schemas/Summary" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { description: Token ausente o inválido }
+  /v1/summary/members:
+    get:
+      summary: Top de personas por costo (aparte del resumen porque crece con la cardinalidad)
+      parameters: [{ $ref: "#/components/parameters/from" }, { $ref: "#/components/parameters/to" }, { $ref: "#/components/parameters/dataset" }]
+      responses:
+        "200":
+          description: "Top 10: {from, to, top_members: [{name, provider, cost, ...}]}"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { description: Token ausente o inválido }
   /v1/timeseries:
     get:
       summary: Serie diaria de costo y tokens
@@ -305,5 +314,4 @@ components:
         total: { $ref: "#/components/schemas/Metrics" }
         by_provider: { type: object, additionalProperties: { $ref: "#/components/schemas/Metrics" } }
         top_teams: { type: array, items: { type: object } }
-        top_members: { type: array, items: { type: object } }
         top_services: { type: array, items: { type: object } }

@@ -5,6 +5,7 @@ Rutas
 GET    /v1/health                          sin auth (health check)
 GET    /v1/me                              tenant, permisos y tenant de ejemplo
 GET    /v1/summary?from&to[&dataset=demo]  KPIs del dashboard
+GET    /v1/summary/members?from&to        top de personas (aparte: crece con la cardinalidad)
 GET    /v1/timeseries?from&to&group_by     serie diaria (provider|member|team|service)
 GET    /v1/identities?from&to              identidades vistas y si están asignadas
 POST   /v1/usage/records                   ingesta push (scope radar-gastos/ingest) → 202
@@ -305,6 +306,13 @@ def me() -> dict[str, Any]:
 @tracer.capture_method
 def summary() -> dict[str, Any]:
     return DashboardService(container().usage).summary(read_tenant(), _range())
+
+
+@app.get("/v1/summary/members")
+@tracer.capture_method
+def summary_members() -> dict[str, Any]:
+    """Top de personas, aparte del resumen: es la única consulta que crece con la cardinalidad."""
+    return DashboardService(container().usage).top_members(read_tenant(), _range())
 
 
 @app.get("/v1/timeseries")

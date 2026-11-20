@@ -71,7 +71,8 @@ def test_summary_total_comes_from_teams_and_matches_members() -> None:
         repo.upsert(record(f"user:{i}", "0.50"), Attribution(member=f"m{i}", team="data"))
     summary = DashboardService(repo).summary("acme", DateRange(START, END))
     assert summary["total"]["cost"] == "15.00"
-    assert sum(Decimal(m["cost"]) for m in summary["top_members"]) == Decimal("5.00")  # top 10
+    top = DashboardService(repo).top_members("acme", DateRange(START, END))["top_members"]
+    assert sum(Decimal(m["cost"]) for m in top) == Decimal("5.00")  # top 10 de 30
 
 
 def test_shard_is_stable_and_in_range() -> None:

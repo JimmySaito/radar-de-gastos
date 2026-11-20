@@ -168,7 +168,8 @@ def test_dashboard_summary_and_timeseries(repos, make_record: RecordFactory) -> 
     summary = service.summary("acme", rng)
     assert summary["total"]["cost"] == "4.00"
     assert set(summary["by_provider"]) == {"anthropic", "openai"}
-    assert summary["top_members"][0]["name"] == "alice@acme.com"
+    assert "top_members" not in summary  # va aparte: es la consulta que crece con la cardinalidad
+    assert service.top_members("acme", rng)["top_members"][0]["name"] == "alice@acme.com"
 
     ts = service.timeseries("acme", rng, None)
     assert ts["days"] == ["2026-11-10", "2026-11-11"]

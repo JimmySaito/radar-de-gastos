@@ -1,0 +1,229 @@
+{
+  "run_id": "e54093a4",
+  "scenario": "stress",
+  "mode": "mixed",
+  "target_rps": 20.0,
+  "duration_s": 133.4,
+  "requests": 2519,
+  "achieved_rps": 18.9,
+  "records_per_s": 203.7,
+  "duplicates_sent": 187,
+  "client_dropped": 0,
+  "status": {
+    "ingest:202": 1274,
+    "read:200": 1245
+  },
+  "error_rate": 0.0,
+  "consistency": {
+    "expected_cost": "682058.82",
+    "observed_cost": "682058.82",
+    "converged": true,
+    "convergence_s": 0.1
+  },
+  "ingest_latency_ms": {
+    "p50": 127.3,
+    "p95": 321.3,
+    "p99": 428.4,
+    "max": 902.7,
+    "mean": 150.8
+  },
+  "read_latency_ms": {
+    "p50": 924.1,
+    "p95": 12437.2,
+    "p99": 14532.6,
+    "max": 24662.1,
+    "mean": 3423.5
+  },
+  "server": {
+    "api_requests": {
+      "per_minute": [
+        510.0,
+        1607.0,
+        403.0
+      ],
+      "max": 1607.0,
+      "sum": 2520.0
+    },
+    "api_5xx": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "api_4xx": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "api_latency_p95": {
+      "per_minute": [
+        9211.6,
+        11647.3,
+        11437.6
+      ],
+      "max": 11647.3,
+      "sum": 32296.5
+    },
+    "api_fn_concurrency": {
+      "per_minute": [
+        40.0,
+        64.0,
+        64.0
+      ],
+      "max": 64.0,
+      "sum": 168.0
+    },
+    "api_fn_duration_p95": {
+      "per_minute": [
+        9211.6,
+        11626.1,
+        11437.6
+      ],
+      "max": 11626.1,
+      "sum": 32275.3
+    },
+    "api_fn_throttles": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "collector_concurrency": {
+      "per_minute": [
+        8.0,
+        20.0,
+        19.0
+      ],
+      "max": 20.0,
+      "sum": 47.0
+    },
+    "collector_invocations": {
+      "per_minute": [
+        119.0,
+        193.0,
+        33.0
+      ],
+      "max": 193.0,
+      "sum": 345.0
+    },
+    "collector_errors": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "collector_duration_p95": {
+      "per_minute": [
+        2954.1,
+        9457.3,
+        9837.0
+      ],
+      "max": 9837.0,
+      "sum": 22248.5
+    },
+    "queue_oldest_s": {
+      "per_minute": [
+        0.0,
+        4.0,
+        6.0,
+        0.0
+      ],
+      "max": 6.0,
+      "sum": 10.0
+    },
+    "queue_visible": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "dlq_visible": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "ddb_write_units": {
+      "per_minute": [
+        0.0,
+        44848.0,
+        149760.0,
+        63568.0
+      ],
+      "max": 149760.0,
+      "sum": 258176.0
+    },
+    "ddb_read_units": {
+      "per_minute": [
+        0.0,
+        71191.5,
+        294693.5,
+        86896.0
+      ],
+      "max": 294693.5,
+      "sum": 452781.0
+    },
+    "ddb_throttled": {
+      "per_minute": [],
+      "max": 0,
+      "sum": 0
+    },
+    "ledger_written": {
+      "per_minute": [
+        5150.0,
+        14225.0,
+        7800.0
+      ],
+      "max": 14225.0,
+      "sum": 27175.0
+    },
+    "queue_to_ledger_p95_ms": {
+      "per_minute": [
+        4518.3,
+        6684.5,
+        10130.1
+      ],
+      "max": 10130.1,
+      "sum": 21332.9
+    },
+    "ledger_retry_conflict": {
+      "per_minute": [
+        350.0,
+        2748.0,
+        1990.0
+      ],
+      "max": 2748.0,
+      "sum": 5088.0
+    },
+    "ledger_retry_condition": {
+      "per_minute": [
+        3.0
+      ],
+      "max": 3.0,
+      "sum": 3.0
+    }
+  },
+  "environment": "AWS Academy Learner Lab, us-east-1",
+  "executed_at": "2026-11-20T02:21:53+00:00"
+}

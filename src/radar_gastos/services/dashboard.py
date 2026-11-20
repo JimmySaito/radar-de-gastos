@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from radar_gastos.domain.ledger import Dimension
+from radar_gastos.domain.ledger import AggregateKey, Dimension
 from radar_gastos.domain.models import Metrics, PrincipalMapping
 from radar_gastos.domain.ports import UsageRepository
 
@@ -55,34 +55,20 @@ class DashboardService:
         self._repo = repository
 
     def summary(self, tenant_id: str, rng: DateRange) -> dict[str, Any]:
-        """KPIs: total, por proveedor, top equipos, top miembros y top servicios."""
-        by_member = self._repo.query_aggregates(tenant_id, rng.start, rng.end, Dimension.MEMBER)
+        """KPIs: total, por proveedor, top equipos y top servicios.
+
+        Solo lee dimensiones de cardinalidad baja, así que responde en milisegundos aunque haya
+        miles de personas. El top de personas, que sí recorre todas sus celdas, se pide aparte
+        (``top_members``) para no frenar el resto del dashboard.
+        """
         by_team = self._repo.query_aggregates(tenant_id, rng.start, rng.end, Dimension.TEAM)
         by_service = self._repo.query_aggregates(tenant_id, rng.start, rng.end, Dimension.SERVICE)
 
         total, providers = Metrics(), defaultdict[str, Metrics](Metrics)
-        # Cada hecho suma exactamente una vez en cada dimensión: el total sale de la de equipos,
-        # que tiene pocas celdas, y no de la de personas, que puede tener miles.
+        # Cada hecho suma exactamente una vez en cada dimensión: el total sale de la de equipos.
         for key, m in by_team.items():
             total += m
             providers[key.provider] += m
-
-        def top(source: Any, limit: int = 10) -> list[dict[str, Any]]:
-            """Top-N por nombre (sumando proveedores), con el desglose por proveedor."""
-            grouped: defaultdict[tuple[str, str], Metrics] = defaultdict(Metrics)
-            totals: defaultdict[str, Decimal] = defaultdict(Decimal)
-            for key, m in source.items():
-                grouped[(key.value, key.provider)] += m
-                totals[key.value] += m.cost
-            leaders = sorted(totals, key=lambda name: totals[name], reverse=True)[:limit]
-            rank = {name: i for i, name in enumerate(leaders)}
-            rows = sorted(
-                ((k, m) for k, m in grouped.items() if k[0] in rank),
-                key=lambda kv: (rank[kv[0][0]], kv[0][1]),
-            )
-            return [
-                {"name": name, "provider": prov, **_metrics_json(m)} for (name, prov), m in rows
-            ]
 
         return {
             "tenant_id": tenant_id,
@@ -91,17 +77,26 @@ class DashboardService:
             "currency": "USD",
             "total": _metrics_json(total),
             "by_provider": {p: _metrics_json(m) for p, m in sorted(providers.items())},
-            "top_teams": top(by_team),
-            "top_members": top(by_member),
-            "top_services": top(by_service),
+            "top_teams": _top(by_team),
+            "top_services": _top(by_service),
+        }
+
+    def top_members(self, tenant_id: str, rng: DateRange, limit: int = 10) -> dict[str, Any]:
+        """Top de personas: recorre la dimensión de mayor cardinalidad, por eso va aparte."""
+        by_member = self._repo.query_aggregates(tenant_id, rng.start, rng.end, Dimension.MEMBER)
+        return {
+            "from": rng.start.isoformat(),
+            "to": rng.end.isoformat(),
+            "top_members": _top(by_member, limit),
         }
 
     def timeseries(
         self, tenant_id: str, rng: DateRange, dimension: Dimension | None
     ) -> dict[str, Any]:
         """Serie diaria agrupada por proveedor (por defecto) o por una dimensión."""
+        # Por proveedor basta la dimensión de equipos: mismos totales, muchas menos celdas.
         source = self._repo.query_aggregates(
-            tenant_id, rng.start, rng.end, dimension or Dimension.MEMBER
+            tenant_id, rng.start, rng.end, dimension or Dimension.TEAM
         )
         series: defaultdict[str, defaultdict[str, Metrics]] = defaultdict(
             lambda: defaultdict(Metrics)
@@ -153,3 +148,19 @@ class DashboardService:
                 }
             )
         return sorted(rows, key=lambda r: (r["mapped"], -Decimal(r["cost"])))
+
+
+def _top(source: Mapping[AggregateKey, Metrics], limit: int = 10) -> list[dict[str, Any]]:
+    """Top-N por nombre (sumando proveedores), con el desglose por proveedor."""
+    grouped: defaultdict[tuple[str, str], Metrics] = defaultdict(Metrics)
+    totals: defaultdict[str, Decimal] = defaultdict(Decimal)
+    for key, m in source.items():
+        grouped[(key.value, key.provider)] += m
+        totals[key.value] += m.cost
+    leaders = sorted(totals, key=lambda name: totals[name], reverse=True)[:limit]
+    rank = {name: i for i, name in enumerate(leaders)}
+    rows = sorted(
+        ((k, m) for k, m in grouped.items() if k[0] in rank),
+        key=lambda kv: (rank[kv[0][0]], kv[0][1]),
+    )
+    return [{"name": name, "provider": prov, **_metrics_json(m)} for (name, prov), m in rows]
