@@ -80,7 +80,8 @@ if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
 if (-not (Test-Path $Python)) {
     throw "Falta el entorno .venv. Ejecuta: py -3.13 -m venv .venv; .venv\Scripts\python -m pip install -e "".[dev]"""
 }
-if ($Tenant -notmatch '^[a-z0-9][a-z0-9-]{1,62}$') {
+# -cnotmatch distingue mayúsculas (-notmatch no lo hace y dejaba pasar 'SaitoCo').
+if ($Tenant -cnotmatch '^[a-z0-9][a-z0-9-]{1,62}$') {
     throw "Tenant no válido: usa minúsculas, números y guiones (p. ej. mi-empresa)."
 }
 

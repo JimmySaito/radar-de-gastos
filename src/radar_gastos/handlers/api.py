@@ -28,6 +28,7 @@ escrituras siempre van al tenant del token.
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -85,6 +86,8 @@ from radar_gastos.services.recurring import (
 logger = Logger(service="radar-gastos-api")
 tracer = Tracer(service="radar-gastos-api")
 metrics = Metrics(namespace="RadarDeGastos", service="api")
+TENANT_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}$")  # igual que TenantId del dominio
+
 app = APIGatewayHttpResolver(cors=CORSConfig(allow_origin="*", max_age=600), strip_prefixes=[])
 
 MAX_INGEST_RECORDS = 1000
@@ -126,6 +129,11 @@ def current_caller() -> Caller:
     )
     if not tenant:
         raise ForbiddenError("el token no está asociado a un tenant")
+    if not TENANT_PATTERN.fullmatch(str(tenant)):
+        # Mejor un 403 claro aquí que un error al guardar datos con un tenant que el modelo rechaza.
+        raise ForbiddenError(
+            f"el tenant '{tenant}' no es válido: usa minúsculas, números y guiones"
+        )
     return Caller(
         tenant_id=str(tenant),
         subject=str(claims.get("sub", claims.get("client_id", "unknown"))),

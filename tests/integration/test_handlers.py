@@ -573,3 +573,12 @@ def test_unexpected_aws_error_is_a_generic_500(
     _fail_with(monkeypatch, memory_env, _client_error("ValidationException"))
     status, body = call(http_event("GET", "/v1/connectors", claims=USER))
     assert status == 500 and body["message"] == "Error interno"
+
+
+def test_token_with_invalid_tenant_gets_clear_403(memory_env: bootstrap.Container) -> None:
+    # Un usuario creado con 'SaitoCo' (mayúsculas) no puede guardar datos: mejor rechazarlo claro.
+    status, body = call(
+        http_event("GET", "/v1/me", claims={"sub": "u9", "custom:tenant_id": "SaitoCo"})
+    )
+    assert status == 403
+    assert "minúsculas" in body["message"]
