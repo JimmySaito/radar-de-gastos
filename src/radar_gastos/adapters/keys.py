@@ -3,7 +3,7 @@
 | Entidad        | PK                                   | SK                               |
 |----------------|--------------------------------------|----------------------------------|
 | Hecho          | T#{tenant}#F#{yyyy-mm}               | {yyyy-mm-dd}#{record_id}         |
-| Agregado       | T#{tenant}#A#{dimension}#{yyyy-mm}   | {yyyy-mm-dd}#{provider}#{valor}  |
+| Agregado       | T#{tenant}#A#{dimension}#{yyyy-mm}   | {yyyy-mm-dd}#{provider}#{valor}(*) |
 | Mapeo          | T#{tenant}#MAP                       | {provider}#{principal}           |
 | Conector       | CFG#CONNECTOR                        | {tenant}#{connector_id}          |
 | Presupuesto    | T#{tenant}#BUDGET                    | {team}#{provider|*}              |
@@ -12,10 +12,15 @@
 Particionar por mes acota el tamaño de cada partición y reparte la escritura de
 agregados (mitiga *hot partitions*); una consulta de 90 días toca a lo sumo 4
 particiones por dimensión.
+
+(*) Una celda agregada puede repartirse en *shards* (sufijo ``#~{n}``; el shard 0 no lleva
+sufijo, así que con un solo shard las claves son las de siempre). Cada hecho escribe siempre
+en el mismo shard, y las lecturas suman todos los shards de una celda. Ver ADR-0004.
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from datetime import date, timedelta
 
@@ -31,16 +36,30 @@ def fact_key(record: UsageRecord) -> dict[str, str]:
     }
 
 
-def aggregate_key(tenant_id: str, key: AggregateKey) -> dict[str, str]:
+SHARD_MARK = "#~"
+
+
+def aggregate_key(tenant_id: str, key: AggregateKey, shard: int = 0) -> dict[str, str]:
     month = key.usage_date[:7]
+    suffix = f"{SHARD_MARK}{shard}" if shard else ""
     return {
         "PK": f"T#{tenant_id}#A#{key.dimension.value}#{month}",
-        "SK": f"{key.usage_date}#{key.provider}#{key.value}",
+        "SK": f"{key.usage_date}#{key.provider}#{key.value}{suffix}",
     }
 
 
-def parse_aggregate_sk(dimension: Dimension, sk: str) -> AggregateKey:
-    usage_date, provider, value = sk.split("#", 2)
+def shard_for(record_id: str, shards: int) -> int:
+    """Shard estable de un hecho: sus revisiones y reatribuciones tocan las mismas celdas."""
+    if shards <= 1:
+        return 0
+    return int(hashlib.sha256(record_id.encode()).hexdigest()[:8], 16) % shards
+
+
+def parse_aggregate_sk(dimension: Dimension, sk: str, value: str | None = None) -> AggregateKey:
+    """``value`` (atributo agg_value) evita depender del formato del SK cuando existe."""
+    usage_date, provider, rest = sk.split("#", 2)
+    if value is None:
+        value = rest
     return AggregateKey(usage_date, provider, dimension, value)
 
 

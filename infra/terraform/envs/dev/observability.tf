@@ -43,18 +43,22 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "api_latency_p95" {
-  alarm_name          = "${local.name}-api-latency-p95"
-  alarm_description   = "Latencia p95 de la API > 800 ms (objetivo de desempeño)."
-  namespace           = "AWS/ApiGateway"
-  metric_name         = "Latency"
-  dimensions          = { ApiId = aws_apigatewayv2_api.http.id }
-  extended_statistic  = "p95"
-  period              = 300
-  evaluation_periods  = 2
+  alarm_name         = "${local.name}-api-latency-p95"
+  alarm_description  = "Latencia p95 de la API > 800 ms (objetivo de desempeño)."
+  namespace          = "AWS/ApiGateway"
+  metric_name        = "Latency"
+  dimensions         = { ApiId = aws_apigatewayv2_api.http.id }
+  extended_statistic = "p95"
+  # 3 de 5 minutos. Con 2 periodos de 5 minutos oscilaba entre ALARM y OK en la prueba de estrés:
+  # el periodo en curso, aún incompleto, la devolvía a OK cada pocos minutos.
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 3
   threshold           = 800
   comparison_operator = "GreaterThanThreshold"
   treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 }
 
 resource "aws_cloudwatch_dashboard" "ops" {

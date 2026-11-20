@@ -69,9 +69,12 @@ class DynamoUsageRepository:
         base_delay: float = 0.02,
         sleep: Callable[[float], None] = time.sleep,
         on_retry: Callable[[str], None] | None = None,
+        aggregate_shards: int = 1,
     ) -> None:
         self._db = client
         self._table = table_name
+        # >1 reparte cada celda agregada para que los colectores no compitan por el mismo ítem.
+        self._shards = max(1, aggregate_shards)
         self._max_attempts = max_attempts
         self._base_delay = base_delay
         self._sleep = sleep
@@ -129,19 +132,22 @@ class DynamoUsageRepository:
             put["ExpressionAttributeValues"] = {":v": _ser.serialize(previous.version)}
 
         items: list[dict[str, Any]] = [{"Put": put}]
+        shard = keys.shard_for(record.record_id, self._shards)
         for agg_key, delta in compute_deltas(previous, record, attribution).items():
-            items.append({"Update": self._aggregate_update(record.tenant_id, agg_key, delta)})
+            items.append(
+                {"Update": self._aggregate_update(record.tenant_id, agg_key, delta, shard)}
+            )
         return items
 
     def _aggregate_update(
-        self, tenant_id: str, agg_key: AggregateKey, delta: Metrics
+        self, tenant_id: str, agg_key: AggregateKey, delta: Metrics, shard: int
     ) -> dict[str, Any]:
         return {
             "TableName": self._table,
-            "Key": _serialize(keys.aggregate_key(tenant_id, agg_key)),
+            "Key": _serialize(keys.aggregate_key(tenant_id, agg_key, shard)),
             "UpdateExpression": "ADD input_tokens :i, output_tokens :o, cached_tokens :c, "
             "requests :r, cost :k "
-            "SET #t = :type",
+            "SET #t = :type, agg_value = :val",
             "ExpressionAttributeNames": {"#t": "type"},
             "ExpressionAttributeValues": _serialize(
                 {
@@ -151,6 +157,7 @@ class DynamoUsageRepository:
                     ":r": delta.requests,
                     ":k": delta.cost,
                     ":type": "aggregate",
+                    ":val": agg_key.value,
                 }
             ),
         }
@@ -208,12 +215,12 @@ class DynamoUsageRepository:
                         requests=int(item.get("requests", 0)),
                         cost=Decimal(item.get("cost", 0)),
                     )
-                    if not metrics.is_zero:
-                        result[keys.parse_aggregate_sk(dimension, item["SK"])] = metrics
+                    key = keys.parse_aggregate_sk(dimension, item["SK"], item.get("agg_value"))
+                    result[key] = result.get(key, Metrics()) + metrics  # suma de shards
                 if "LastEvaluatedKey" not in page:
                     break
                 params["ExclusiveStartKey"] = page["LastEvaluatedKey"]
-        return result
+        return {k: m for k, m in result.items() if not m.is_zero}
 
 
 class DynamoMappingRepository:

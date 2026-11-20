@@ -163,6 +163,7 @@ def main() -> None:
     parser.add_argument("--verify-timeout", type=float, default=300)
     parser.add_argument("--pause", type=float, default=90, help="segundos entre escenarios")
     parser.add_argument("--region", default="us-east-1")
+    parser.add_argument("--tag", default="", help="sufijo de los archivos (p. ej. sharding)")
     args = parser.parse_args()
 
     api_url = tf_output("api_url")
@@ -202,7 +203,7 @@ def main() -> None:
         summary["server"] = server_metrics(cw, start, end, api_id, prefix)
         summary["environment"] = "AWS Academy Learner Lab, us-east-1"
         summary["executed_at"] = datetime.now(tz=UTC).isoformat(timespec="seconds")
-        out = RESULTS / f"aws-{scenario}.json"
+        out = RESULTS / f"aws-{scenario}{'-' + args.tag if args.tag else ''}.json"
         out.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
         c = summary.get("consistency") or {}
         print(

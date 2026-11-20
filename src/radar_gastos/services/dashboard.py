@@ -61,7 +61,9 @@ class DashboardService:
         by_service = self._repo.query_aggregates(tenant_id, rng.start, rng.end, Dimension.SERVICE)
 
         total, providers = Metrics(), defaultdict[str, Metrics](Metrics)
-        for key, m in by_member.items():  # cada hecho suma exactamente una vez por dimensión
+        # Cada hecho suma exactamente una vez en cada dimensión: el total sale de la de equipos,
+        # que tiene pocas celdas, y no de la de personas, que puede tener miles.
+        for key, m in by_team.items():
             total += m
             providers[key.provider] += m
 

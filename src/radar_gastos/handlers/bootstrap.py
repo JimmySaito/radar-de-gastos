@@ -36,6 +36,8 @@ class Settings:
     auth_mode: str
     m2m_client_tenants: dict[str, str]
     demo_tenant: str
+    aggregate_shards: int = 1
+    read_cache_seconds: float = 0.0
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -47,6 +49,8 @@ class Settings:
             auth_mode=os.environ.get("AUTH_MODE", "jwt"),
             m2m_client_tenants=json.loads(os.environ.get("M2M_CLIENT_TENANTS", "{}")),
             demo_tenant=os.environ.get("DEMO_TENANT", "demo"),
+            aggregate_shards=int(os.environ.get("AGGREGATE_SHARDS", "1")),
+            read_cache_seconds=float(os.environ.get("READ_CACHE_SECONDS", "0")),
         )
 
 
@@ -97,7 +101,15 @@ def _aws_container(settings: Settings) -> Container:
     configs = DynamoConfigRepository(ddb, settings.table_name)
     return Container(
         settings=settings,
-        usage=DynamoUsageRepository(ddb, settings.table_name, on_retry=_notify_retry),
+        usage=_with_read_cache(
+            DynamoUsageRepository(
+                ddb,
+                settings.table_name,
+                on_retry=_notify_retry,
+                aggregate_shards=settings.aggregate_shards,
+            ),
+            settings,
+        ),
         mappings=DynamoMappingRepository(ddb, settings.table_name),
         configs=configs,
         alert_ledger=configs,
@@ -156,6 +168,15 @@ def _memory_container(settings: Settings) -> Container:
         alerts=InMemoryAlerts(),
         recurring=recurring,
     )
+
+
+def _with_read_cache(repo: UsageRepository, settings: Settings) -> UsageRepository:
+    """La API activa una caché corta de lecturas (READ_CACHE_SECONDS); el colector no la usa."""
+    if settings.read_cache_seconds <= 0:
+        return repo
+    from radar_gastos.adapters.cache import CachedUsageRepository
+
+    return CachedUsageRepository(repo, settings.read_cache_seconds)
 
 
 @cache

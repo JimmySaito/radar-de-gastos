@@ -260,3 +260,55 @@ def test_profiles_on_dynamodb(dynamodb_table: tuple[Any, str]) -> None:
     assert [p.name for p in repo.list_profiles("user:j")] == ["Ana", "María"]
     repo.delete_profile("user:j", "ana-1")
     assert [p.profile_id for p in repo.list_profiles("user:j")] == ["maria-1"]
+
+
+# ---------------------------------------------------------------- celdas repartidas en shards
+def test_sharded_cells_sum_to_the_same_totals(
+    dynamodb_table: tuple[Any, str], make_record: RecordFactory
+) -> None:
+    """Con shards, muchos hechos de la misma celda se reparten y la lectura los vuelve a sumar."""
+    client, table = dynamodb_table
+    sharded = DynamoUsageRepository(client, table, aggregate_shards=8)
+    for i in range(40):
+        sharded.upsert(make_record(principal=f"user:{i}", cost=Decimal("0.25")), ALICE)
+
+    team_items = client.query(
+        TableName=table,
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues={":pk": {"S": "T#acme#A#team#2026-11"}},
+    )["Items"]
+    assert len(team_items) > 1  # la celda caliente quedó repartida
+    assert _cost(sharded, Dimension.TEAM) == {"data": Decimal("10.00")}
+    assert _cost(sharded, Dimension.SERVICE) == {"claude-opus-5-5": Decimal("10.00")}
+
+
+def test_sharded_revisions_and_reattribution_stay_exact(
+    dynamodb_table: tuple[Any, str], make_record: RecordFactory
+) -> None:
+    """Un hecho siempre usa el mismo shard: revisarlo o reatribuirlo no deja restos."""
+    repo = DynamoUsageRepository(*dynamodb_table, aggregate_shards=8)
+    for i in range(10):
+        repo.upsert(make_record(principal=f"user:{i}"), ALICE)
+    repo.upsert(make_record(principal="user:3", cost=Decimal("5.00")), ALICE)  # revisión
+    repo.upsert(make_record(principal="user:4"), BOB)  # reatribución
+    assert _cost(repo, Dimension.TEAM) == {
+        "data": Decimal("1.25") * 8 + Decimal("5.00"),
+        "platform": Decimal("1.25"),
+    }
+
+
+def test_reads_cells_written_before_sharding(
+    dynamodb_table: tuple[Any, str], make_record: RecordFactory
+) -> None:
+    """Las celdas del formato anterior (sin shard ni agg_value) se siguen leyendo y sumando."""
+    client, table = dynamodb_table
+    DynamoUsageRepository(client, table).upsert(make_record(principal="user:old"), ALICE)
+    client.update_item(  # simula una celda antigua: sin el atributo agg_value
+        TableName=table,
+        Key={"PK": {"S": "T#acme#A#team#2026-11"}, "SK": {"S": "2026-11-10#anthropic#data"}},
+        UpdateExpression="REMOVE agg_value",
+    )
+    sharded = DynamoUsageRepository(client, table, aggregate_shards=8)
+    for i in range(5):
+        sharded.upsert(make_record(principal=f"user:new{i}"), ALICE)
+    assert _cost(sharded, Dimension.TEAM) == {"data": Decimal("1.25") * 6}

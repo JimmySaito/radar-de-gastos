@@ -73,6 +73,8 @@ locals {
   common_env = {
     TABLE_NAME = aws_dynamodb_table.main.name
     QUEUE_URL  = module.work_queue.queue_url
+    # Celdas agregadas repartidas para que los colectores no compitan por el mismo ítem (ADR-0004).
+    AGGREGATE_SHARDS = tostring(var.aggregate_shards)
   }
   table_arn = aws_dynamodb_table.main.arn
 }
@@ -93,6 +95,7 @@ module "api_fn" {
   environment = merge(local.common_env, {
     AUTH_MODE          = "jwt"
     DEMO_TENANT        = "demo"
+    READ_CACHE_SECONDS = tostring(var.read_cache_seconds)
     M2M_CLIENT_TENANTS = jsonencode({ (aws_cognito_user_pool_client.ingest.id) = var.m2m_tenant })
     }, local.web_on_api ? {
     # La API también sirve el dashboard (sin CloudFront).

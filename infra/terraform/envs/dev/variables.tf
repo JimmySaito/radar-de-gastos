@@ -93,3 +93,15 @@ variable "frontend_hosting" {
     error_message = "frontend_hosting debe ser cloudfront o api."
   }
 }
+
+variable "aggregate_shards" {
+  description = "Shards por celda agregada. 1 = sin reparto; más reduce conflictos de escritura y multiplica las celdas a leer."
+  type        = number
+  default     = 8
+}
+
+variable "read_cache_seconds" {
+  description = "Caché de lecturas de agregados en la API (segundos; 0 la desactiva)."
+  type        = number
+  default     = 15
+}
