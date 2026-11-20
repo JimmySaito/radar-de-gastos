@@ -5,6 +5,11 @@ locals {
   lab          = var.lab_role_arn != ""
   lab_role     = local.lab ? var.lab_role_arn : null
   tracing_mode = local.lab ? "PassThrough" : "Active"
+
+  # Learner Lab permite como máximo 10 entornos de ejecución de Lambda concurrentes en toda la
+  # cuenta y desactiva la cuenta si se supera (así se perdió el primer laboratorio en la prueba de
+  # estrés). La concurrencia reservada pone un techo duro por función: 4 + 3 + 1 + 1 = 9.
+  lab_concurrency = { api = 4, collector = 3, scheduler = 1, budget = 1 }
 }
 
 data "aws_caller_identity" "current" {}
@@ -80,18 +85,19 @@ locals {
 }
 
 module "api_fn" {
-  source          = "../../modules/lambda_function"
-  name            = "${local.name}-api"
-  description     = "API HTTP: dashboard, ingesta push y gobierno"
-  handler         = "radar_gastos.handlers.api.handler"
-  package_path    = var.lambda_package
-  layers          = [aws_lambda_layer_version.deps.arn]
-  memory_mb       = 1024 # más memoria = más CPU = menor latencia p99 en agregaciones
-  timeout_seconds = 29   # "Probar conexión" llama al proveedor; límite de integración de HTTP API: 30 s
-  alarm_actions   = [aws_sns_topic.alerts.arn]
-  kms_key_arn     = local.kms_key_arn
-  role_arn        = local.lab_role
-  tracing_mode    = local.tracing_mode
+  source               = "../../modules/lambda_function"
+  name                 = "${local.name}-api"
+  description          = "API HTTP: dashboard, ingesta push y gobierno"
+  handler              = "radar_gastos.handlers.api.handler"
+  package_path         = var.lambda_package
+  layers               = [aws_lambda_layer_version.deps.arn]
+  memory_mb            = 1024 # más memoria = más CPU = menor latencia p99 en agregaciones
+  timeout_seconds      = 29   # "Probar conexión" llama al proveedor; límite de integración de HTTP API: 30 s
+  alarm_actions        = [aws_sns_topic.alerts.arn]
+  kms_key_arn          = local.kms_key_arn
+  role_arn             = local.lab_role
+  reserved_concurrency = local.lab ? local.lab_concurrency["api"] : -1
+  tracing_mode         = local.tracing_mode
   environment = merge(local.common_env, {
     AUTH_MODE          = "jwt"
     DEMO_TENANT        = "demo"
@@ -129,19 +135,20 @@ module "api_fn" {
 }
 
 module "collector_fn" {
-  source          = "../../modules/lambda_function"
-  name            = "${local.name}-collector"
-  description     = "Consumidor SQS: recolecta proveedores y escribe el ledger idempotente"
-  handler         = "radar_gastos.handlers.collector.handler"
-  package_path    = var.lambda_package
-  layers          = [aws_lambda_layer_version.deps.arn]
-  memory_mb       = 1024
-  timeout_seconds = 60
-  alarm_actions   = [aws_sns_topic.alerts.arn]
-  kms_key_arn     = local.kms_key_arn
-  role_arn        = local.lab_role
-  tracing_mode    = local.tracing_mode
-  environment     = local.common_env
+  source               = "../../modules/lambda_function"
+  name                 = "${local.name}-collector"
+  description          = "Consumidor SQS: recolecta proveedores y escribe el ledger idempotente"
+  handler              = "radar_gastos.handlers.collector.handler"
+  package_path         = var.lambda_package
+  layers               = [aws_lambda_layer_version.deps.arn]
+  memory_mb            = 1024
+  timeout_seconds      = 60
+  alarm_actions        = [aws_sns_topic.alerts.arn]
+  kms_key_arn          = local.kms_key_arn
+  role_arn             = local.lab_role
+  reserved_concurrency = local.lab ? local.lab_concurrency["collector"] : -1
+  tracing_mode         = local.tracing_mode
+  environment          = local.common_env
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = concat(local.kms_use_statements, [
@@ -170,24 +177,25 @@ resource "aws_lambda_event_source_mapping" "collector" {
   function_response_types            = ["ReportBatchItemFailures"]
 
   scaling_config {
-    maximum_concurrency = var.collector_max_concurrency
+    maximum_concurrency = local.lab ? local.lab_concurrency["collector"] : var.collector_max_concurrency
   }
 }
 
 module "scheduler_fn" {
-  source          = "../../modules/lambda_function"
-  name            = "${local.name}-scheduler"
-  description     = "Fan-out horario de tareas de recolección"
-  handler         = "radar_gastos.handlers.scheduler.handler"
-  package_path    = var.lambda_package
-  layers          = [aws_lambda_layer_version.deps.arn]
-  memory_mb       = 256
-  timeout_seconds = 30
-  alarm_actions   = [aws_sns_topic.alerts.arn]
-  kms_key_arn     = local.kms_key_arn
-  role_arn        = local.lab_role
-  tracing_mode    = local.tracing_mode
-  environment     = local.common_env
+  source               = "../../modules/lambda_function"
+  name                 = "${local.name}-scheduler"
+  description          = "Fan-out horario de tareas de recolección"
+  handler              = "radar_gastos.handlers.scheduler.handler"
+  package_path         = var.lambda_package
+  layers               = [aws_lambda_layer_version.deps.arn]
+  memory_mb            = 256
+  timeout_seconds      = 30
+  alarm_actions        = [aws_sns_topic.alerts.arn]
+  kms_key_arn          = local.kms_key_arn
+  role_arn             = local.lab_role
+  reserved_concurrency = local.lab ? local.lab_concurrency["scheduler"] : -1
+  tracing_mode         = local.tracing_mode
+  environment          = local.common_env
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = concat(local.kms_use_statements, [
@@ -198,19 +206,20 @@ module "scheduler_fn" {
 }
 
 module "budget_fn" {
-  source          = "../../modules/lambda_function"
-  name            = "${local.name}-budget"
-  description     = "Evaluación diaria de presupuestos y alertas"
-  handler         = "radar_gastos.handlers.budget.handler"
-  package_path    = var.lambda_package
-  layers          = [aws_lambda_layer_version.deps.arn]
-  memory_mb       = 512
-  timeout_seconds = 120
-  alarm_actions   = [aws_sns_topic.alerts.arn]
-  kms_key_arn     = local.kms_key_arn
-  role_arn        = local.lab_role
-  tracing_mode    = local.tracing_mode
-  environment     = merge(local.common_env, { ALERT_TOPIC_ARN = aws_sns_topic.alerts.arn })
+  source               = "../../modules/lambda_function"
+  name                 = "${local.name}-budget"
+  description          = "Evaluación diaria de presupuestos y alertas"
+  handler              = "radar_gastos.handlers.budget.handler"
+  package_path         = var.lambda_package
+  layers               = [aws_lambda_layer_version.deps.arn]
+  memory_mb            = 512
+  timeout_seconds      = 120
+  alarm_actions        = [aws_sns_topic.alerts.arn]
+  kms_key_arn          = local.kms_key_arn
+  role_arn             = local.lab_role
+  reserved_concurrency = local.lab ? local.lab_concurrency["budget"] : -1
+  tracing_mode         = local.tracing_mode
+  environment          = merge(local.common_env, { ALERT_TOPIC_ARN = aws_sns_topic.alerts.arn })
   policy_json = jsonencode({
     Version = "2012-10-17"
     Statement = concat(local.kms_use_statements, [

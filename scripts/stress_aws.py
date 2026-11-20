@@ -165,7 +165,22 @@ def main() -> None:
     parser.add_argument("--region", default="us-east-1")
     parser.add_argument("--tag", default="", help="sufijo de los archivos (p. ej. sharding)")
     parser.add_argument("--mode", choices=["mixed", "read", "ingest"], default="mixed")
+    parser.add_argument(
+        "--allow-lab",
+        action="store_true",
+        help="ejecutar aunque la cuenta sea de AWS Academy Learner Lab (ver advertencia)",
+    )
     args = parser.parse_args()
+
+    caller = boto3.client("sts", region_name=args.region).get_caller_identity()["Arn"]
+    if ":assumed-role/voclabs/" in caller and not args.allow_lab:
+        sys.exit(
+            "Cuenta de AWS Academy Learner Lab: el laboratorio permite como máximo 10 ejecuciones "
+            "concurrentes de Lambda y desactiva la cuenta si se superan (así se perdió el primer "
+            "laboratorio). El despliegue en modo laboratorio limita las funciones a 9 en total, de "
+            "modo que el exceso se rechaza con 429/500 en vez de superar el límite. Si aun así "
+            "quieres ejecutar la prueba, repite con --allow-lab y una carga pequeña."
+        )
 
     api_url = tf_output("api_url")
     domain = tf_output("cognito_domain")

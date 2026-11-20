@@ -95,8 +95,18 @@ activa solo el **modo laboratorio**, que cambia esto:
 | Dashboard | S3 + CloudFront | La propia API (HTTPS de API Gateway) |
 | Cifrado | Llave KMS propia | Llaves administradas por AWS |
 | Trazas X-Ray | Activas | Desactivadas |
+| Concurrencia de Lambda | Sin techo por función; colector hasta 20 | **Máximo 9 en total** (API 4, colector 3, horarios 1 + 1) |
 
-El resto (Lambda, SQS, DynamoDB, Cognito, Scheduler, alarmas) es idéntico. Pasos:
+El resto (Lambda, SQS, DynamoDB, Cognito, Scheduler, alarmas) es idéntico.
+
+> **Importante:** Learner Lab permite como máximo **10 entornos de ejecución de Lambda concurrentes** en toda la
+> cuenta y **desactiva la cuenta** si se superan, con pérdida de todos los recursos. Así se perdió el primer
+> laboratorio de este proyecto durante una prueba de estrés (la API llegó a 64 ejecuciones simultáneas). Por eso el
+> modo laboratorio reserva concurrencia por función (9 en total): bajo carga, el exceso se rechaza con errores
+> 429/500 en lugar de superar el límite. No ejecutes pruebas de estrés grandes en el laboratorio;
+> `scripts/stress_aws.py` se niega a correr ahí sin `--allow-lab`.
+
+Pasos:
 
 1. En AWS Academy: **Modules → Learner Lab → Start Lab** y espera el punto verde.
 2. **AWS Details → AWS CLI: Show**: copia el bloque y pégalo en `notepad $HOME\.aws\credentials`. Al guardar,
