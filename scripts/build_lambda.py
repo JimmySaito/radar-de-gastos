@@ -66,6 +66,7 @@ def main() -> None:
             "pip",
             "install",
             "--quiet",
+            "--disable-pip-version-check",  # sin el aviso de "nueva versión de pip"
             "--target",
             str(BUILD),
             "--platform",
