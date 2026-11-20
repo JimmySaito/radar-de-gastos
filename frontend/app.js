@@ -21,6 +21,20 @@ const compact = new Intl.NumberFormat("es", { notation: "compact", maximumFracti
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const providerName = (p) => PROVIDER_LABEL[p] || p;
 
+// La CSP (style-src 'self') bloquea los atributos de estilo en línea del HTML generado, pero permite
+// asignar estilos desde JavaScript. Colores y anchos dinámicos viajan en data-bg / data-w y se
+// aplican aquí cada vez que se agrega contenido al documento.
+function applyDynamicStyles(root) {
+  const nodes = root.matches?.("[data-bg],[data-w]") ? [root] : [];
+  nodes.push(...(root.querySelectorAll?.("[data-bg],[data-w]") ?? []));
+  for (const el of nodes) {
+    if (el.dataset.bg) el.style.background = el.dataset.bg;
+    if (el.dataset.w) el.style.width = el.dataset.w;
+  }
+}
+new MutationObserver((changes) => changes.forEach((c) => c.addedNodes.forEach((n) => n.nodeType === 1 && applyDynamicStyles(n))))
+  .observe(document.documentElement, { childList: true, subtree: true });
+
 function toast(message, isError = false) {
   const el = $("toast");
   el.textContent = message;
@@ -218,7 +232,7 @@ function renderProviders(summary) {
   const total = Number(summary.total.cost) || 1;
   const rows = Object.entries(summary.by_provider).sort((a, b) => PROVIDER_ORDER.indexOf(a[0]) - PROVIDER_ORDER.indexOf(b[0]));
   $("providersTable").tBodies[0].innerHTML = rows.map(([p, m]) => `
-    <tr><td><span class="swatch" style="background:${providerColor(p)}"></span>${esc(providerName(p))}</td>
+    <tr><td><span class="swatch" data-bg="${providerColor(p)}"></span>${esc(providerName(p))}</td>
     <td class="num">${usd.format(Number(m.cost))}</td><td class="num">${compact.format(m.total_tokens)}</td>
     <td class="num">${(100 * Number(m.cost) / total).toFixed(1)}%</td></tr>`).join("") || '<tr><td colspan="4" class="muted">Sin datos en el rango</td></tr>';
 }
@@ -365,7 +379,7 @@ async function renderConnections(panel) {
     <div class="panel-head"><h2>Conexiones</h2><button class="btn primary" id="addConn" type="button">+ Agregar conexión</button></div>
     <div id="connForm"></div>
     <div class="stack" id="connList">
-      ${list.length ? "" : '<div class="card"><p class="muted" style="margin:0">Todavía no hay conexiones. Agrega una para empezar a ver tus datos reales.</p></div>'}
+      ${list.length ? "" : '<div class="card"><p class="muted m-0">Todavía no hay conexiones. Agrega una para empezar a ver tus datos reales.</p></div>'}
       ${list.map((c) => {
         const s = c.status;
         const meta = s
@@ -413,10 +427,10 @@ async function syncConnection(conn, button, days) {
 }
 
 function showProviderPicker(specs) {
-  $("connForm").innerHTML = `<section class="card" style="margin-bottom:12px">
+  $("connForm").innerHTML = `<section class="card mb-12">
     <div class="card-head"><h2>¿Qué quieres conectar?</h2><button class="link" type="button" id="cancelPick">Cancelar</button></div>
     <div class="providers">${specs.map((s) => `<button type="button" class="provider-option" data-provider="${esc(s.provider)}"><strong>${esc(s.name)}</strong><span>${esc(s.description)}</span></button>`).join("")}</div>
-    <p class="muted" style="margin:12px 0 0">¿Otro sistema? Envíalo por API en <a href="#/empresa/configuracion/ingesta">Ingesta por API</a>.</p>
+    <p class="muted m-0 mt-12">¿Otro sistema? Envíalo por API en <a href="#/empresa/configuracion/ingesta">Ingesta por API</a>.</p>
   </section>`;
   $("cancelPick").onclick = () => { $("connForm").innerHTML = ""; };
   $("connForm").querySelectorAll("[data-provider]").forEach((b) => { b.onclick = () => showConnectionForm(specs.find((s) => s.provider === b.dataset.provider)); });
@@ -437,10 +451,10 @@ function fieldInput(f, conn) {
 }
 
 function showConnectionForm(spec, conn = null) {
-  $("connForm").innerHTML = `<section class="card" style="margin-bottom:12px">
+  $("connForm").innerHTML = `<section class="card mb-12">
     <div class="card-head"><h2>${conn ? "Editar" : "Nueva"} conexión · ${esc(spec.name)}</h2><button class="link" type="button" id="cancelForm">Cancelar</button></div>
     <form class="form" id="connEdit" novalidate>
-      <p class="muted" style="margin:0">${esc(spec.description)} ${spec.notes ? esc(spec.notes) : ""} ${spec.docs_url ? `<a class="link" href="${esc(spec.docs_url)}" target="_blank" rel="noopener noreferrer">Documentación ↗</a>` : ""}</p>
+      <p class="muted m-0">${esc(spec.description)} ${spec.notes ? esc(spec.notes) : ""} ${spec.docs_url ? `<a class="link" href="${esc(spec.docs_url)}" target="_blank" rel="noopener noreferrer">Documentación ↗</a>` : ""}</p>
       <div class="fields-2">
         <div class="field"><label for="f_label">Nombre de la conexión</label><input id="f_label" name="label" value="${esc(conn?.label ?? spec.name)}" maxlength="120"></div>
         <div class="field"><label for="f_lookback">Días que se releen en cada sincronización</label><input id="f_lookback" name="lookback_days" type="number" min="1" max="31" value="${conn?.lookback_days ?? 3}"><div class="help">Los proveedores corrigen sus cifras hasta 24 h después; 3 días es un buen valor.</div></div>
@@ -451,7 +465,7 @@ function showConnectionForm(spec, conn = null) {
         <button class="btn" type="button" id="testBtn">Probar conexión</button>
         <button class="btn primary" type="submit" id="saveBtn">${conn ? "Guardar cambios" : "Guardar y sincronizar"}</button>
       </div>
-      <p class="muted" style="margin:0;font-size:12px">Las credenciales se guardan cifradas en el servidor (Secrets Manager en AWS, <code>~/.radar-gastos</code> en local) y nunca se vuelven a mostrar.</p>
+      <p class="muted m-0 fs-12">Las credenciales se guardan cifradas en el servidor (Secrets Manager en AWS, <code>~/.radar-gastos</code> en local) y nunca se vuelven a mostrar.</p>
     </form></section>`;
   $("connForm").scrollIntoView({ behavior: "smooth", block: "start" });
   $("cancelForm").onclick = () => { $("connForm").innerHTML = ""; };
@@ -510,7 +524,7 @@ async function renderPeople(panel) {
     <p class="muted">Cada proveedor identifica el consumo con una identidad técnica (usuario, API key, proyecto, tag). Asígnala a una persona y a un equipo para ver el gasto por responsable.
     ${ids.items.length ? `Cobertura actual: <strong>${coverage.toFixed(1)}%</strong> del gasto de los últimos 90 días está asignado.` : ""}</p>
     <datalist id="teamList">${teams.map((t) => `<option value="${esc(t)}">`).join("")}</datalist>
-    <section class="card" style="margin-bottom:12px">
+    <section class="card mb-12">
       <div class="card-head"><h2>Identidades sin asignar (${unmapped.length})</h2></div>
       <div class="table-scroll"><table class="data"><thead><tr><th>Proveedor</th><th>Identidad</th><th class="num">Costo 90 d</th><th>Persona</th><th>Equipo</th><th></th></tr></thead><tbody>
       ${unmapped.map((r, i) => `<tr data-i="${i}"><td>${esc(providerName(r.provider))}</td><td><code>${esc(r.name)}</code></td><td class="num">${usd.format(Number(r.cost))}</td>
@@ -518,7 +532,7 @@ async function renderPeople(panel) {
         <td><button class="btn small primary" data-act="assign" type="button">Asignar</button></td></tr>`).join("") || '<tr><td colspan="6" class="muted">Todo el consumo está asignado 🎉</td></tr>'}
       </tbody></table></div>
     </section>
-    <section class="card" style="margin-bottom:12px">
+    <section class="card mb-12">
       <div class="card-head"><h2>Asignaciones (${maps.items.length})</h2></div>
       <div class="table-scroll"><table class="data"><thead><tr><th>Proveedor</th><th>Identidad</th><th>Persona</th><th>Equipo</th><th></th></tr></thead><tbody>
       ${maps.items.map((m, i) => `<tr data-m="${i}"><td>${esc(providerName(m.provider))}</td><td><code>${esc(m.principal)}</code></td><td>${esc(m.member)}</td><td>${esc(m.team)}</td>
@@ -569,7 +583,7 @@ async function renderBudgetAdmin(panel) {
   panel.innerHTML = `
     <div class="panel-head"><h2>Presupuestos mensuales</h2></div>
     <p class="muted">Se envía una alerta al llegar al 50 %, 80 % y 100 % del presupuesto (una sola vez por umbral y mes).</p>
-    <section class="card" style="margin-bottom:12px"><div class="table-scroll"><table class="data">
+    <section class="card mb-12"><div class="table-scroll"><table class="data">
       <thead><tr><th>Equipo</th><th>Proveedor</th><th class="num">Gastado</th><th class="num">Límite</th><th>Estado</th><th></th></tr></thead><tbody>
       ${budgets.items.map((b, i) => { const [icon, label] = budgetState(b.ratio); return `<tr data-i="${i}"><td>${esc(b.team)}</td><td>${b.provider ? esc(providerName(b.provider)) : "Todos"}</td>
         <td class="num">${usd.format(Number(b.spent))}</td><td class="num">${usd0.format(Number(b.monthly_limit))}</td>
@@ -607,10 +621,10 @@ function renderIngest(panel) {
   panel.innerHTML = `
     <div class="panel-head"><h2>Ingesta por API</h2></div>
     <p class="muted">Cualquier sistema (un LLM propio, otra nube, una herramienta SaaS) puede reportar consumo con una llamada HTTP. Los envíos son idempotentes: reenviar el mismo registro no duplica el costo; enviar una versión corregida lo actualiza.</p>
-    <section class="card" style="margin-bottom:12px"><div class="card-head"><h2>Endpoint</h2></div>
+    <section class="card mb-12"><div class="card-head"><h2>Endpoint</h2></div>
       <pre class="code">POST ${esc(base)}/v1/usage/records</pre>
       ${state.config.authMode === "local" ? "" : '<p class="muted">Autenticación: token OAuth 2.0 <em>client_credentials</em> con el scope <code>radar-gastos/ingest</code> (cliente M2M de Cognito).</p>'}</section>
-    <section class="card" style="margin-bottom:12px"><div class="card-head"><h2>Ejemplo (bash / curl)</h2></div>
+    <section class="card mb-12"><div class="card-head"><h2>Ejemplo (bash / curl)</h2></div>
       <pre class="code">curl -X POST "${esc(base)}/v1/usage/records" \\
   -H "content-type: application/json" ${esc(auth)} \\
   -d '${esc(body)}'</pre></section>
@@ -623,7 +637,7 @@ function renderIngest(panel) {
         <tr><td><code>cost</code></td><td>Costo en USD como texto decimal, p. ej. <code>"12.50"</code></td></tr>
         <tr><td><code>provider</code></td><td>Opcional, por defecto <code>custom</code></td></tr>
       </tbody></table>
-      <p class="muted" style="margin-bottom:0">Hasta 1.000 registros por petición. Contrato completo: <code>docs/openapi.yaml</code>.</p></section>`;
+      <p class="muted mb-0">Hasta 1.000 registros por petición. Contrato completo: <code>docs/openapi.yaml</code>.</p></section>`;
 }
 
 // ------------------------------------------------------------------ gastos recurrentes
@@ -662,7 +676,7 @@ function chargeItem(c, cat) {
   return `<li class="charge${c.soon ? " soon" : ""}">
     <div class="date-badge"><b>${new Date(`${c.date}T12:00:00`).getDate()}</b><span>${shortDate(c.date, { month: "short" })}</span></div>
     <div class="charge-main"><strong>${esc(c.name)}</strong>
-      <span><span class="swatch" style="background:${categoryColor(cat, c.category)}"></span>${esc(categoryLabel(cat, c.category))}</span></div>
+      <span><span class="swatch" data-bg="${categoryColor(cat, c.category)}"></span>${esc(categoryLabel(cat, c.category))}</span></div>
     <div class="charge-side"><span class="amt">${money(c.amount, c.currency)}</span>
       <span class="due">${c.soon ? '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1l7 13H1z" fill="var(--status-warning)"/></svg>' : ""}${dueLabel(c.days_left)}</span></div>
   </li>`;
@@ -682,7 +696,7 @@ function calendarGrid(summary, cat) {
     const title = list.map((c) => `${c.name}: ${money(c.amount, c.currency)}`).join("\n");
     cells.push(`<div class="cal-cell${d === today ? " today" : ""}${list.length ? " has" : ""}${d < today ? " past" : ""}" ${title ? `title="${esc(title)}"` : ""}>
       <span class="cal-day">${d}</span>
-      <span class="cal-dots">${list.slice(0, 4).map((c) => `<i style="background:${categoryColor(cat, c.category)}"></i>`).join("")}</span>
+      <span class="cal-dots">${list.slice(0, 4).map((c) => `<i data-bg="${categoryColor(cat, c.category)}"></i>`).join("")}</span>
       ${list.length ? `<span class="sr-only">${esc(title)}</span>` : ""}
     </div>`);
   }
@@ -721,7 +735,7 @@ function expenseTable(items, cat, { business = false, actions = true, people = f
     ${items.map((e) => `<tr data-id="${esc(e.expense_id)}" class="${e.active ? "" : "inactive"}">
       <td><strong>${esc(e.name)}</strong>${e.plan ? ` <span class="muted">· ${esc(e.plan)}</span>` : ""}${e.active ? "" : ' <span class="chip">Cancelada</span>'}${business && e.owner ? `<div class="muted small">${esc(e.owner)}${e.team ? ` · ${esc(e.team)}` : ""}</div>` : ""}</td>
       ${people ? `<td>${whoCell(e)}</td>` : ""}
-      <td><span class="swatch" style="background:${categoryColor(cat, e.category)}"></span>${esc(categoryLabel(cat, e.category))}</td>
+      <td><span class="swatch" data-bg="${categoryColor(cat, e.category)}"></span>${esc(categoryLabel(cat, e.category))}</td>
       <td>${CYCLE_LABEL[e.cycle]}</td>
       ${business ? `<td class="num">${e.seats}</td>` : ""}
       <td class="num">${money(e.charge, e.currency)}${partial && e.charge !== e.full_charge ? `<div class="muted small">de ${money(e.full_charge, e.currency)}</div>` : ""}</td>
@@ -745,7 +759,7 @@ function personFilter(data, isDemo) {
   const key = isDemo ? "ejemplo" : "real";
   const current = RECUR.member[key];
   const chip = (id, label, color) => `<button type="button" class="person-chip" data-member="${esc(id ?? "")}" aria-pressed="${String((current ?? null) === id)}">
-    ${color ? `<span class="avatar xs" style="background:${color}">${esc(initials(label))}</span>` : ""}${esc(label)}</button>`;
+    ${color ? `<span class="avatar xs" data-bg="${color}">${esc(initials(label))}</span>` : ""}${esc(label)}</button>`;
   el.innerHTML = `<span class="muted small">Ver:</span>${chip(null, "Todos")}${people.map((p, i) => chip(p.member_id, p.name, p.member_id === "sin-asignar" ? css("--text-muted") : personColor(i))).join("")}`;
   el.querySelectorAll("[data-member]").forEach((b) => {
     b.onclick = () => { RECUR.member[key] = b.dataset.member || null; render(); };
@@ -765,9 +779,9 @@ function peopleCard(data) {
       const color = p.member_id === "sin-asignar" ? css("--text-muted") : personColor(i);
       const value = Number(p.monthly[cur] || 0);
       return `<button type="button" class="person-row" data-member="${esc(p.member_id)}" title="Ver solo ${esc(p.name)}">
-        <span class="avatar" style="background:${color}">${esc(initials(p.name))}</span>
+        <span class="avatar" data-bg="${color}">${esc(initials(p.name))}</span>
         <span class="person-name"><strong>${esc(p.name)}</strong><span class="muted small">${p.relation ? `${esc(p.relation)} · ` : ""}${plural(p.count, "suscripción", "suscripciones")}${p.shared ? ` (${plural(p.shared, "compartida", "compartidas")})` : ""}</span></span>
-        <span class="person-bar" aria-hidden="true"><i style="width:${(100 * value / max).toFixed(1)}%;background:${color}"></i></span>
+        <span class="person-bar" aria-hidden="true"><i data-w="${(100 * value / max).toFixed(1)}%" data-bg="${color}"></i></span>
         <span class="person-amount">${moneyLines(p.monthly).map((l) => `<span>${l}</span>`).join("") || "—"}</span>
       </button>`;
     }).join("")}</div>
@@ -849,24 +863,24 @@ async function renderPersonalSettings() {
     RECUR.profiles = data.profiles;
     const stats = Object.fromEntries(data.by_member.map((p) => [p.member_id, p]));
     body.innerHTML = `
-      <section class="card" style="margin-bottom:12px">
+      <section class="card mb-12">
         <div class="panel-head"><h2>Personas (${data.profiles.length})</h2></div>
         <p class="muted">Crea un perfil por persona (por ejemplo, tú, tu pareja o tus hijos) y asígnale sus suscripciones. Un plan compartido entre varias personas se divide en partes iguales en el panel.</p>
         <div class="people-admin">${data.profiles.map((p, i) => `<div class="person-admin" data-id="${esc(p.profile_id)}">
-            <span class="avatar" style="background:${personColor(i)}">${esc(initials(p.name))}</span>
+            <span class="avatar" data-bg="${personColor(i)}">${esc(initials(p.name))}</span>
             <input aria-label="Nombre" value="${esc(p.name)}" maxlength="60" data-k="name">
             <input aria-label="Relación" value="${esc(p.relation)}" maxlength="40" data-k="relation" placeholder="Relación (opcional)">
             <span class="muted small">${plural(stats[p.profile_id]?.count || 0, "suscripción", "suscripciones")} · ${moneyText(stats[p.profile_id]?.monthly)}/mes</span>
             <button class="btn small" data-act="save" type="button">Guardar</button>
             <button class="btn small danger" data-act="del" type="button">Eliminar</button>
           </div>`).join("") || '<p class="muted">Todavía no hay personas.</p>'}</div>
-        <form class="inline-form" id="newPerson" style="margin-top:12px">
+        <form class="inline-form mt-12" id="newPerson">
           <div class="field"><label for="np_name">Nombre</label><input id="np_name" name="name" maxlength="60" required placeholder="Ej. Jimmy"></div>
           <div class="field"><label for="np_rel">Relación <span class="muted">(opcional)</span></label><input id="np_rel" name="relation" maxlength="40" placeholder="Yo, pareja, hija…"></div>
           <button class="btn primary" type="submit">+ Agregar persona</button>
         </form>
       </section>
-      <section class="card" style="margin-bottom:12px">
+      <section class="card mb-12">
         <div class="panel-head"><h2>Suscripciones (${data.items.length})</h2>
           <div class="row"><button class="btn" type="button" id="exportCsv" ${data.items.length ? "" : "disabled"}>Exportar CSV</button>
           <button class="btn primary" type="button" data-add-expense="personal">+ Agregar suscripción</button></div></div>
@@ -949,7 +963,7 @@ async function renderLicensesCard(isDemo) {
           <div><span class="muted small">Proyección anual</span><strong>${moneyText(summary.annual_projection)}</strong></div>
           <div><span class="muted small">Próxima renovación</span><strong>${next ? `${esc(next.name)} · ${shortDate(next.date)}` : "—"}</strong>${next ? `<span class="muted small">${money(next.amount, next.currency)} · ${dueLabel(next.days_left)}</span>` : ""}</div>
         </div>`
-      : '<p class="muted" style="margin:0">Registra las licencias SaaS de la empresa (Slack, GitHub, Microsoft 365, Claude Team…) para ver su costo mensual junto al consumo.</p>';
+      : '<p class="muted m-0">Registra las licencias SaaS de la empresa (Slack, GitHub, Microsoft 365, Claude Team…) para ver su costo mensual junto al consumo.</p>';
   } catch {
     card.hidden = true;
   }
@@ -966,9 +980,9 @@ function setupExpenseDialog() {
 }
 
 function memberOptions(selected) {
-  if (!RECUR.profiles.length) return '<p class="muted small" style="margin:0">Aún no hay personas. Crea una aquí o en Configuración personal.</p>';
+  if (!RECUR.profiles.length) return '<p class="muted small m-0">Aún no hay personas. Crea una aquí o en Configuración personal.</p>';
   return RECUR.profiles.map((p, i) => `<label class="member-option"><input type="checkbox" value="${esc(p.profile_id)}" ${selected.includes(p.profile_id) ? "checked" : ""}>
-    <span class="avatar xs" style="background:${personColor(i)}">${esc(initials(p.name))}</span>${esc(p.name)}</label>`).join("");
+    <span class="avatar xs" data-bg="${personColor(i)}">${esc(initials(p.name))}</span>${esc(p.name)}</label>`).join("");
 }
 
 async function openExpenseDialog(scope, expense = null, presetService = null) {

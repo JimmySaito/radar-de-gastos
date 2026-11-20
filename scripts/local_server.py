@@ -37,7 +37,7 @@ os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 
 from radar_gastos.adapters.localfs import default_home  # noqa: E402
 from radar_gastos.adapters.memory import InMemoryQueue  # noqa: E402
-from radar_gastos.handlers import api  # noqa: E402
+from radar_gastos.handlers import api, web  # noqa: E402
 from radar_gastos.handlers.bootstrap import container, today_utc  # noqa: E402
 from radar_gastos.services.connections import ConnectionService  # noqa: E402
 from radar_gastos.services.demo import seed_demo  # noqa: E402
@@ -136,6 +136,10 @@ class Handler(BaseHTTPRequestHandler):
         # Obligatorio con HTTP/1.1 keep-alive: sin él, el navegador espera más bytes indefinidamente.
         self.send_header("content-length", str(len(payload)))
         self.send_header("cache-control", "no-cache")  # tras un cambio, el navegador revalida
+        # La misma CSP que en AWS: un estilo o script en línea que falle allá falla también aquí.
+        for name, value in web.security_headers("").items():
+            if name not in {"content-type", "cache-control", "strict-transport-security"}:
+                self.send_header(name, value)
         self.end_headers()
         self.wfile.write(payload)
 

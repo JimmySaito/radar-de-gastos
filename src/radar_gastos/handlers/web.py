@@ -42,7 +42,8 @@ def web_root() -> Path:
     return Path(os.environ.get("WEB_ROOT", default)).resolve()
 
 
-def _security_headers(content_type: str) -> dict[str, str]:
+def security_headers(content_type: str) -> dict[str, str]:
+    """Cabeceras de seguridad del dashboard; las usan la API y el servidor local."""
     cognito = os.environ.get("COGNITO_DOMAIN_URL", "")
     csp = (
         "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -84,7 +85,7 @@ def serve(event: dict[str, Any]) -> dict[str, Any]:
         content_type = CONTENT_TYPES.get(target.suffix, "application/octet-stream")
     return {
         "statusCode": 200,
-        "headers": _security_headers(content_type),
+        "headers": security_headers(content_type),
         "body": body,
         "isBase64Encoded": False,
     }

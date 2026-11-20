@@ -333,3 +333,10 @@ fieldset.members legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
   .person-bar { display: none; }
   .person-admin { grid-template-columns: auto minmax(0, 1fr); }
 }
+
+/* Utilidades de espaciado: la CSP no permite estilos en línea en el HTML generado. */
+.m-0 { margin: 0; }
+.mb-0 { margin-bottom: 0; }
+.mb-12 { margin-bottom: 12px; }
+.mt-12 { margin-top: 12px; }
+.fs-12 { font-size: 12px; }

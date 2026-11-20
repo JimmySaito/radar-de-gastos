@@ -168,7 +168,7 @@ make check          # ruff + mypy --strict + pytest (unitarias, integración con
 
 | Métrica | Valor |
 |---|---|
-| Pruebas | 141 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Pruebas | 144 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
 | Cobertura (líneas y ramas) | 96,4 % (umbral de CI: 80 %) |
 | Tipado | `mypy --strict` sin errores |
 | Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
