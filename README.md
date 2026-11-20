@@ -168,8 +168,8 @@ make check          # ruff + mypy --strict + pytest (unitarias, integración con
 
 | Métrica | Valor |
 |---|---|
-| Pruebas | 144 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
-| Cobertura (líneas y ramas) | 96,4 % (umbral de CI: 80 %) |
+| Pruebas | 153 (unitarias, integración con DynamoDB/SQS/SNS/Secrets emulados, Hypothesis) |
+| Cobertura (líneas y ramas) | 96,5 % (umbral de CI: 80 %) |
 | Tipado | `mypy --strict` sin errores |
 | Lint | `ruff` (reglas E, F, B, S/bandit, PL, UP, SIM, PT...) |
 
@@ -201,13 +201,17 @@ Modelo de amenazas: [docs/security.md](docs/security.md). Contrato de la API: [d
 | [`tests/load/k6_ingest.js`](tests/load/k6_ingest.js) | Escenarios `load`, `stress`, `spike`, `soak` contra la ruta de escritura en AWS |
 | [`tests/load/k6_dashboard.js`](tests/load/k6_dashboard.js) | Carga sobre el modelo de lectura |
 | [`scripts/loadgen.py`](scripts/loadgen.py) | Generador Python con inyección de duplicados y **verificación de consistencia** |
+| [`scripts/stress_aws.py`](scripts/stress_aws.py) | Ejecuta `loadgen.py` contra el despliegue en AWS con token OAuth y guarda las métricas de CloudWatch de cada escenario |
+| [`scripts/verify_load_runs.py`](scripts/verify_load_runs.py) | Vuelve a verificar la exactitud de cada corrida cuando la cola ya se vació |
 
-```bash
-make load-test SCENARIO=stress BASE_URL=https://<api> TOKEN=<access_token_m2m>
-python scripts/loadgen.py --base-url https://<api> --token <token> --scenario spike --rps 100 --duration 300
+```powershell
+.\.venv\Scripts\python scripts\stress_aws.py --scenarios load stress spike --rps 20 --duration 120
+.\.venv\Scripts\python scripts\verify_load_runs.py docs\results\aws-load.json docs\results\aws-stress.json docs\results\aws-spike.json
 ```
 
-Los resultados medidos están en [`docs/results/`](docs/results/).
+Los resultados medidos están en [`docs/results/`](docs/results/). En AWS, con 404 lotes duplicados, el costo
+agregado coincidió al centavo en las tres corridas; la ingesta tuvo p95 de 199 a 481 ms y el límite medido fue el
+ledger (≈ 100 registros/s por celdas agregadas calientes).
 
 ## Estructura
 

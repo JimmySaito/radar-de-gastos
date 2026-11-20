@@ -1,0 +1,319 @@
+{
+  "run_id": "5a81aeba",
+  "scenario": "spike",
+  "mode": "mixed",
+  "target_rps": 20.0,
+  "duration_s": 124.7,
+  "requests": 1051,
+  "achieved_rps": 8.4,
+  "records_per_s": 90.4,
+  "duplicates_sent": 76,
+  "client_dropped": 293,
+  "status": {
+    "ingest:202": 527,
+    "read:200": 522,
+    "read:503": 1,
+    "read:500": 1
+  },
+  "error_rate": 0.0019,
+  "consistency": {
+    "expected_cost": "279914.39",
+    "observed_cost": "267055.92",
+    "converged": false,
+    "convergence_s": 301.3
+  },
+  "ingest_latency_ms": {
+    "p50": 131.5,
+    "p95": 480.9,
+    "p99": 2208.9,
+    "max": 2476.8,
+    "mean": 232.4
+  },
+  "read_latency_ms": {
+    "p50": 5082.0,
+    "p95": 12031.5,
+    "p99": 19014.2,
+    "max": 29248.1,
+    "mean": 6098.9
+  },
+  "server": {
+    "api_requests": {
+      "per_minute": [
+        131.0,
+        811.0,
+        123.0,
+        28.0,
+        28.0,
+        27.0,
+        28.0,
+        15.0
+      ],
+      "max": 811.0,
+      "sum": 1191.0
+    },
+    "api_5xx": {
+      "per_minute": [
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 2.0,
+      "sum": 2.0
+    },
+    "api_4xx": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "api_latency_p95": {
+      "per_minute": [
+        4980.2,
+        10077.7,
+        5027.7,
+        29.8,
+        34.9,
+        35.6,
+        40.4,
+        88.9
+      ],
+      "max": 10077.7,
+      "sum": 20315.1
+    },
+    "api_fn_concurrency": {
+      "per_minute": [
+        15.0,
+        64.0,
+        14.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "max": 64.0,
+      "sum": 98.0
+    },
+    "api_fn_duration_p95": {
+      "per_minute": [
+        4948.8,
+        10077.7,
+        5019.5,
+        7.9,
+        8.4,
+        8.1,
+        8.6,
+        66.8
+      ],
+      "max": 10077.7,
+      "sum": 20145.7
+    },
+    "api_fn_throttles": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "collector_concurrency": {
+      "per_minute": [
+        4.0,
+        5.0,
+        20.0,
+        20.0,
+        2.0,
+        2.0
+      ],
+      "max": 20.0,
+      "sum": 53.0
+    },
+    "collector_invocations": {
+      "per_minute": [
+        33.0,
+        37.0,
+        54.0,
+        30.0,
+        14.0,
+        13.0
+      ],
+      "max": 54.0,
+      "sum": 181.0
+    },
+    "collector_errors": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0
+      ],
+      "max": 1.0,
+      "sum": 1.0
+    },
+    "collector_duration_p95": {
+      "per_minute": [
+        1591.2,
+        2765.7,
+        46787.5,
+        38852.1,
+        1177.2,
+        2070.0
+      ],
+      "max": 46787.5,
+      "sum": 93243.6
+    },
+    "queue_oldest_s": {
+      "per_minute": [
+        468.0,
+        0.0,
+        2.0,
+        57.0,
+        57.0,
+        162.0,
+        224.0,
+        297.0,
+        327.0
+      ],
+      "max": 468.0,
+      "sum": 1594.0
+    },
+    "queue_visible": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        87.0,
+        87.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 87.0,
+      "sum": 174.0
+    },
+    "dlq_visible": {
+      "per_minute": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": 0.0,
+      "sum": 0.0
+    },
+    "ddb_write_units": {
+      "per_minute": [
+        5329.0,
+        12808.0,
+        47744.0,
+        89760.0,
+        160.0,
+        1440.0,
+        2872.0
+      ],
+      "max": 89760.0,
+      "sum": 160113.0
+    },
+    "ddb_read_units": {
+      "per_minute": [
+        1851.0,
+        33798.0,
+        218164.5,
+        44943.0,
+        43.0,
+        13.5,
+        14.0,
+        14.0,
+        645.0,
+        1208.0
+      ],
+      "max": 218164.5,
+      "sum": 300694.0
+    },
+    "ddb_throttled": {
+      "per_minute": [],
+      "max": 0,
+      "sum": 0
+    },
+    "ledger_written": {
+      "per_minute": [
+        615.0,
+        1375.0,
+        2598.0,
+        5950.0,
+        193.0,
+        180.0,
+        373.0
+      ],
+      "max": 5950.0,
+      "sum": 11284.0
+    },
+    "queue_to_ledger_p95_ms": {
+      "per_minute": [
+        480901.7,
+        5545.9,
+        36223.5,
+        65256.4,
+        65861.3,
+        378219.0,
+        418843.6
+      ],
+      "max": 480901.7,
+      "sum": 1450851.4
+    },
+    "ledger_retry_conflict": {
+      "per_minute": [
+        51.0,
+        226.0,
+        1618.0,
+        6131.0,
+        103.0,
+        8.0
+      ],
+      "max": 6131.0,
+      "sum": 8137.0
+    },
+    "ledger_retry_condition": {
+      "per_minute": [
+        6.0
+      ],
+      "max": 6.0,
+      "sum": 6.0
+    }
+  },
+  "environment": "AWS Academy Learner Lab, us-east-1",
+  "executed_at": "2026-11-20T01:59:03+00:00",
+  "consistency_after_drain": {
+    "checked_at": "2026-11-20T01:59:48+00:00",
+    "expected_cost": "279914.39",
+    "observed_cost": "279914.39",
+    "converged": true
+  }
+}
