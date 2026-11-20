@@ -312,3 +312,21 @@ def test_reads_cells_written_before_sharding(
     for i in range(5):
         sharded.upsert(make_record(principal=f"user:new{i}"), ALICE)
     assert _cost(sharded, Dimension.TEAM) == {"data": Decimal("1.25") * 6}
+
+
+def test_changing_the_number_of_shards_keeps_totals_exact(
+    dynamodb_table: tuple[Any, str], make_record: RecordFactory
+) -> None:
+    """Si cambia N y luego se revisa un hecho, su delta cae en otro shard: la suma sigue exacta."""
+    client, table = dynamodb_table
+    before = DynamoUsageRepository(client, table, aggregate_shards=4)
+    for i in range(12):
+        before.upsert(make_record(principal=f"user:{i}"), ALICE)
+
+    after = DynamoUsageRepository(client, table, aggregate_shards=8)
+    for i in range(12):  # revisiones de los mismos hechos con otro número de shards
+        after.upsert(make_record(principal=f"user:{i}", cost=Decimal("2.00")), ALICE)
+    after.upsert(make_record(principal="user:0", cost=Decimal("2.00")), BOB)  # reatribución
+
+    assert _cost(after, Dimension.TEAM) == {"data": Decimal("22.00"), "platform": Decimal("2.00")}
+    assert _cost(after, Dimension.SERVICE) == {"claude-opus-5-5": Decimal("24.00")}

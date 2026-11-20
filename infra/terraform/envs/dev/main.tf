@@ -78,7 +78,7 @@ locals {
   common_env = {
     TABLE_NAME = aws_dynamodb_table.main.name
     QUEUE_URL  = module.work_queue.queue_url
-    # Celdas agregadas repartidas para que los colectores no compitan por el mismo ítem (ADR-0004).
+    # Celdas agregadas repartidas para que los colectores no compitan por el mismo ítem (ADR-0015).
     AGGREGATE_SHARDS = tostring(var.aggregate_shards)
   }
   table_arn = aws_dynamodb_table.main.arn

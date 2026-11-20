@@ -15,7 +15,7 @@ particiones por dimensión.
 
 (*) Una celda agregada puede repartirse en *shards* (sufijo ``#~{n}``; el shard 0 no lleva
 sufijo, así que con un solo shard las claves son las de siempre). Cada hecho escribe siempre
-en el mismo shard, y las lecturas suman todos los shards de una celda. Ver ADR-0004.
+en el mismo shard, y las lecturas suman todos los shards de una celda. Ver ADR-0015.
 """
 
 from __future__ import annotations

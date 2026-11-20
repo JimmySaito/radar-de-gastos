@@ -1,4 +1,4 @@
-"""Caché corta de lecturas de agregados (lado *Query* de CQRS, ADR-0007).
+"""Caché corta de lecturas de agregados (lado *Query* de CQRS, ADR-0016).
 
 Bajo carga, el dashboard repite las mismas consultas (mismo tenant, rango y dimensión) muchas
 veces por segundo. Los datos de los proveedores ya llegan con horas de retraso y la ingesta es
