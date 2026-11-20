@@ -1,0 +1,38 @@
+[
+  {
+    "personas": 1000,
+    "antes_celdas": 1006,
+    "antes_ms": 3.2,
+    "despues_resumen_celdas": 6,
+    "despues_resumen_ms": 0.2,
+    "top_personas_celdas": 1000,
+    "top_personas_ms": 3.0
+  },
+  {
+    "personas": 10000,
+    "antes_celdas": 10006,
+    "antes_ms": 38.7,
+    "despues_resumen_celdas": 6,
+    "despues_resumen_ms": 2.1,
+    "top_personas_celdas": 10000,
+    "top_personas_ms": 36.6
+  },
+  {
+    "personas": 30000,
+    "antes_celdas": 30006,
+    "antes_ms": 217.0,
+    "despues_resumen_celdas": 6,
+    "despues_resumen_ms": 10.9,
+    "top_personas_celdas": 30000,
+    "top_personas_ms": 206.1
+  },
+  {
+    "personas": 60000,
+    "antes_celdas": 60006,
+    "antes_ms": 459.9,
+    "despues_resumen_celdas": 6,
+    "despues_resumen_ms": 30.5,
+    "top_personas_celdas": 60000,
+    "top_personas_ms": 429.4
+  }
+]

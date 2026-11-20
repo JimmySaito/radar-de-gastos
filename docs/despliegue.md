@@ -119,7 +119,34 @@ recursos y los datos se conservan; el dashboard y el inicio de sesión siguen en
 leer la base de datos y responde 503 (medido en la prueba de disponibilidad). Con *Start Lab* vuelve a funcionar
 sin redesplegar. Para usar solo el dashboard no hace falta copiar credenciales: basta con *Start Lab*.
 
-## 3. Plan de respaldo para la presentación
+## 3. Estado actual (noviembre de 2026)
+
+- El laboratorio donde se desplegó y midió el prototipo fue **desactivado** por superar el límite de concurrencia de
+  Lambda durante una prueba de estrés (ver arriba). Los resultados medidos allí están en `docs/results/aws-*.json`.
+- El segundo laboratorio disponible **no permite** crear Lambda, DynamoDB, SQS, API Gateway, Cognito ni roles IAM
+  (solo EC2 y S3), así que la arquitectura serverless no se puede desplegar en él.
+- **La demostración se hace en local**, con el mismo código y las mismas políticas de seguridad del navegador (CSP)
+  que en AWS. Si se obtiene un Learner Lab nuevo: borrar `terraform.tfstate*` y `terraform.tfvars`, desplegar con el
+  script (aplica el límite de 9 Lambdas) y restaurar la configuración con `scripts/migrate_local_to_aws.py --apply --sync`.
+
+## 4. Presentación en local
+
+**El día anterior**
+
+- [ ] `.venv\Scripts\python -m pytest -q`: todo en verde.
+- [ ] Arrancar el servidor local y revisar *Ejemplo*, *Datos reales*, *Personal* y *Configuración*.
+- [ ] Sincronizar las conexiones desde Configuración para que los datos reales estén al día.
+
+**Antes de empezar**
+
+- [ ] `.venv\Scripts\python scripts\local_server.py` y abrir `http://localhost:8080`.
+- [ ] Tener a mano los resultados medidos en AWS (`docs/results/`) y la sección 8.4 del repositorio de arquitectura
+      para mostrar la evidencia de la nube.
+
+**Si falla internet:** la vista *Ejemplo*, el espacio *Personal* y lo ya sincronizado siguen funcionando; solo falla
+sincronizar con los proveedores.
+
+## 5. Plan de respaldo con AWS disponible
 
 **El día anterior**
 
